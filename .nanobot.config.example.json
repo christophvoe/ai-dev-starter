@@ -1,0 +1,50 @@
+{
+  "_comment_remove_before_use": "Copy this to ~/.nanobot/config.json. Remove this key.",
+
+  "providers": {
+    "anthropic": {
+      "apiKey": "YOUR_ANTHROPIC_API_KEY"
+    }
+  },
+
+  "agents": {
+    "defaults": {
+      "model": "claude-sonnet-4-5",
+      "provider": "anthropic",
+      "workspace": "C:/Users/Voelt/trading_agent"
+    }
+  },
+
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "token": "YOUR_TELEGRAM_BOT_TOKEN",
+      "_comment_allowFrom": "Get your Telegram user ID by messaging @userinfobot",
+      "allowFrom": ["YOUR_TELEGRAM_USER_ID"]
+    }
+  },
+
+  "tools": {
+    "exec": {
+      "enabled": true
+    },
+    "web": {
+      "search": {
+        "provider": "brave",
+        "apiKey": "YOUR_BRAVE_API_KEY",
+        "_comment_fallback": "Falls back to DuckDuckGo if no Brave key"
+      }
+    },
+    "mcpServers": {
+      "filesystem": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "C:/Users/Voelt/trading_agent"
+        ],
+        "enabledTools": ["read_file", "list_directory", "search_files"]
+      }
+    }
+  }
+}
