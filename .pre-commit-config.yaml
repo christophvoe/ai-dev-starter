@@ -1,0 +1,56 @@
+# Pre-commit hooks — run automatically on every `git commit`
+# Install: uv run pre-commit install
+# Manual:  uv run pre-commit run --all-files
+# Update:  uv run pre-commit autoupdate
+
+repos:
+  # ── Ruff: linting + formatting (replaces black, isort, flake8) ──────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.12
+    hooks:
+      - id: ruff
+        name: ruff lint
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+        name: ruff format
+
+  # ── General file hygiene ────────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+        exclude: \.vscode/
+      - id: check-toml
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: debug-statements
+      - id: detect-private-key
+
+  # ── Mypy: type checking ────────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.15.0
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - types-requests>=2.31.0
+          - types-beautifulsoup4>=4.12.0
+        args: [--config-file=pyproject.toml]
+        pass_filenames: false
+        entry: mypy src/
+
+  # ── Security: gitleaks (optional) ────────────────────────────────────────────
+  # Uncomment when Go >= 1.23 is installed (gitleaks needs it to build):
+  #   choco install golang   OR   winget install GoLang.Go
+  # - repo: https://github.com/gitleaks/gitleaks
+  #   rev: v8.27.0
+  #   hooks:
+  #     - id: gitleaks
+
+# Configuration
+default_language_version:
+  python: python3

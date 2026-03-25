@@ -7,21 +7,15 @@
     "github": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": { "GITHUB_TOKEN": "" }
+      "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" }
     },
     "sequential-thinking": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
     },
-    "brave-search": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
-      "env": { "BRAVE_API_KEY": "" }
-    },
     "context7": {
       "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp"],
-      "env": { "CONTEXT7_API_KEY": "" }
+      "args": ["-y", "@upstash/context7-mcp"]
     }
   }
 }

@@ -1,5 +1,5 @@
 {
-  "python.defaultInterpreterPath": "${workspaceFolder}/venv/Scripts/python.exe",
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
   "python.terminal.activateEnvironment": true,
   "python.terminal.activateEnvInCurrentTerminal": true,
   "python.analysis.extraPaths": ["${workspaceFolder}/src"],
@@ -28,9 +28,11 @@
   "editor.stickyScroll.enabled": true,
 
   "[python]": {
-    "editor.formatOnSave": false,
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.codeActionsOnSave": {
-      "source.organizeImports": "explicit"
+      "source.organizeImports.ruff": "explicit",
+      "source.fixAll.ruff": "explicit"
     }
   },
 
@@ -40,19 +42,23 @@
     "**/.pytest_cache": true,
     "**/.mypy_cache": true,
     "**/venv": true,
+    "**/.venv": true,
+    "**/.ruff_cache": true,
     "**/*.egg-info": true
   },
   "explorer.fileNesting.enabled": true,
   "explorer.fileNesting.patterns": {
-    "README.md": "CONTRIBUTING*.md, CHANGELOG*.md, CLAUDE.md, WORKFLOW.md",
+    "README.md": "CLAUDE.md",
     ".env": ".env.*",
-    "requirements.txt": "requirements*.txt"
+    "pyproject.toml": "uv.lock, .pre-commit-config.yaml, Makefile, tasks.ps1"
   },
 
   "search.exclude": {
     "**/venv/**": true,
+    "**/.venv/**": true,
     "**/__pycache__/**": true,
-    "**/*.pyc": true
+    "**/*.pyc": true,
+    "**/.ruff_cache/**": true
   },
 
   "github.copilot.enable": {
@@ -79,5 +85,8 @@
   "python.testing.pytestArgs": ["tests"],
   "python.testing.unittestEnabled": false,
 
-  "files.autoSave": "onFocusChange"
+  "files.autoSave": "onFocusChange",
+
+  "ruff.enable": true,
+  "ruff.organizeImports": true
 }

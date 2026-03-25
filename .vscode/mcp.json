@@ -16,17 +16,10 @@
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
     },
-    "brave-search": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
-      "env": { "BRAVE_API_KEY": "${env:BRAVE_API_KEY}" }
-    },
     "context7": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp"],
-      "env": { "CONTEXT7_API_KEY": "${env:CONTEXT7_API_KEY}" }
+      "args": ["-y", "@upstash/context7-mcp"]
     }
   }
 }

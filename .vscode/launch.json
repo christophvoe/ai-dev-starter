@@ -2,34 +2,34 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "▶ Run main.py",
+      "name": "Run main.py",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/src/main.py",
       "console": "integratedTerminal",
       "env": { "PYTHONPATH": "${workspaceFolder}/src" },
-      "python": "${workspaceFolder}/venv/Scripts/python.exe",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
       "justMyCode": true
     },
     {
-      "name": "▶ Run Tests",
+      "name": "Run Tests",
       "type": "debugpy",
       "request": "launch",
       "module": "pytest",
       "args": ["tests/", "-v"],
       "console": "integratedTerminal",
       "env": { "PYTHONPATH": "${workspaceFolder}/src" },
-      "python": "${workspaceFolder}/venv/Scripts/python.exe",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
       "justMyCode": false
     },
     {
-      "name": "▶ Run Current File",
+      "name": "Run Current File",
       "type": "debugpy",
       "request": "launch",
       "program": "${file}",
       "console": "integratedTerminal",
       "env": { "PYTHONPATH": "${workspaceFolder}/src" },
-      "python": "${workspaceFolder}/venv/Scripts/python.exe",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
       "justMyCode": true
     }
   ]

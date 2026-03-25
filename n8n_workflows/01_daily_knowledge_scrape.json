@@ -1,0 +1,65 @@
+{
+  "name": "01 -- Scrape + Summarize",
+  "_NOTE": "Click 'Execute Workflow' to scrape your coding list AND get a summary. Manual trigger only.",
+  "_SETUP": {
+    "step1": "Import into n8n (Workflows menu -> Import from File)",
+    "step2": "Edit 'Configure' node: change MODE/SOURCE/MAX as needed",
+    "step3": "Click Execute Workflow to run it"
+  },
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "node-manual-01",
+      "name": "Click to run",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ══════════════════════════════════════════════════════════════════\n//  CONFIGURE HERE -- change these 4 variables, nothing else\n// ══════════════════════════════════════════════════════════════════\n\n// Where to save scraped articles (can be a different repo!)\nconst OUTPUT_DIR = 'C:\\\\Users\\\\Voelt\\\\ai-dev-starter\\\\data\\\\knowledge\\\\raw\\\\medium';\n\n// What to scrape -- MODE + SOURCE\n//   'list'      + list URL (DEFAULT)\n//   'tag'       + tag name (no cookies needed)\n//   'article'   + article URL\n//   'feed'      + RSS feed URL\n//   'bookmarks' + (SOURCE ignored)\nconst MODE   = 'list';\nconst SOURCE = 'https://medium.com/@voeltzke.christoph/list/coding-6c7978acb372';\nconst MAX    = 20;\n\n// ══════════════════════════════════════════════════════════════════\n//  Build command (don't edit below)\n// ══════════════════════════════════════════════════════════════════\nlet args;\nswitch (MODE) {\n  case 'list':      args = `--list \"${SOURCE}\" --max ${MAX}`; break;\n  case 'article':   args = `--article \"${SOURCE}\" --max ${MAX}`; break;\n  case 'feed':      args = `--url \"${SOURCE}\" --max ${MAX}`; break;\n  case 'bookmarks': args = `--bookmarks --max ${MAX}`; break;\n  default:          args = `--tag \"${SOURCE}\" --max ${MAX}`; break;\n}\n\nargs += ` --output \"${OUTPUT_DIR}\"`;\n\nconst scrapeCmd = `cd /d C:\\\\Users\\\\Voelt\\\\ai-dev-starter && .venv\\\\Scripts\\\\python.exe -m knowledge.medium_scraper ${args}`;\n\nreturn [{ json: { scrapeCmd, outputDir: OUTPUT_DIR, source: MODE === 'bookmarks' ? 'bookmarks' : SOURCE } }];"
+      },
+      "id": "node-config-01",
+      "name": "Configure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.scrapeCmd }}",
+        "timeout": 300
+      },
+      "id": "node-run-01",
+      "name": "Run scraper",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /d C:\\\\Users\\\\Voelt\\\\ai-dev-starter && .venv\\\\Scripts\\\\python.exe -m knowledge.medium_scraper --summarize --max 10 --output \"' + $items('Configure')[0].json.outputDir + '\"' }}",
+        "timeout": 30
+      },
+      "id": "node-summarize-01",
+      "name": "Summarize articles",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Click to run": {
+      "main": [[{ "node": "Configure", "type": "main", "index": 0 }]]
+    },
+    "Configure": {
+      "main": [[{ "node": "Run scraper", "type": "main", "index": 0 }]]
+    },
+    "Run scraper": {
+      "main": [[{ "node": "Summarize articles", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "id": "ai-dev-starter-workflow-01"
+}

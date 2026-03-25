@@ -1,0 +1,16 @@
+{
+  "title": "Agent Reasoning: The Thinking Layer",
+  "url": "https://medium.com/oracledevs/agent-reasoning-the-thinking-layer-14e977fdc649",
+  "author": "Oracle Developers Team",
+  "published": "2026-03-25T17:11:42.534Z",
+  "tags": [
+    "ai-agent",
+    "artificial-intelligence",
+    "agentic-ai",
+    "large-language-models",
+    "ai"
+  ],
+  "summary": "Featured\n\n# Agent Reasoning: The Thinking Layer\n\n## An open-source reasoning layer technology for any Ollama-served LLM\n\n--\n\nListen\n\nShare\n\nMore\n\n### Key Takeaways\n\nAgent Reasoning is an open-source reasoning layer that adds planning, deduction, and self-correction to any Ollama-served LLM (e.g., gemma3, llama3), via plug-and-play Python or a proxy server.Multiple proven reasoning strategies built-in (CoT, Self-Consistency, ToT, ReAct, Self-Reflection, Decomposition, Refinement) with a guided “s",
+  "source_feed": "https://medium.com/feed/tag/ai-agents",
+  "scraped_at": "2026-03-25T17:13:30.220097+00:00"
+}

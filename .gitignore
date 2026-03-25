@@ -45,10 +45,18 @@ htmlcov/
 .dmypy.json
 dmypy.json
 
-# Data / cache (project-specific — adjust as needed)
-data/cache/
-*.csv.gz
-*.parquet
+# Ruff
+.ruff_cache/
+
+# Data / cache — keep dir structure, ignore content
+data/cache/*
+!data/cache/.gitkeep
+data/logs/*
+!data/logs/.gitkeep
+# Keep scraped articles (.md) but ignore large binary files in data/
+data/**/*.csv
+data/**/*.parquet
+data/**/*.csv.gz
 
 # OS
 .DS_Store

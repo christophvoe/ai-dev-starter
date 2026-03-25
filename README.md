@@ -1,100 +1,200 @@
-# AI Dev Starter Template
+# AI Dev Starter
 
-A batteries-included template for AI-assisted Python projects.
+A Python starter template with a Medium knowledge scraper, multi-LLM agent, and n8n automation.
 
-**What's included:**
-- ✅ VS Code configured (venv auto-activation, Python, Copilot, MCPs)
-- ✅ GitHub Copilot custom instructions (`.github/copilot-instructions.md`)
-- ✅ Claude Code context file (`CLAUDE.md`)
-- ✅ MCP servers for both Copilot and Claude Code
-- ✅ F5 debug configs, recommended extensions
-- ✅ `.gitignore` with Python + secrets protection
-- ✅ `.env.example` with common API key templates
+---
 
 ## Quick Start
 
-```bash
-# 1. Clone this template
-git clone https://github.com/christophvoe/ai-dev-starter.git my-project
-cd my-project
+### 1. Install uv (one-time)
 
-# 2. Create virtual environment
-python -m venv venv
-venv\Scripts\activate           # Windows
-# source venv/bin/activate      # Mac/Linux
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Copy and fill in your API keys
-copy .env.example .env
-# Edit .env with your keys
-
-# 5. Open in VS Code (settings auto-apply)
-code .
+```powershell
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-## AI Tools Included
+### 2. Install dependencies
 
-### GitHub Copilot (VS Code)
-- **Inline autocomplete**: Tab to accept
-- **Chat**: `Ctrl+Shift+I` → `@workspace What does X do?`
-- **MCPs configured**: filesystem, github, sequential-thinking, brave-search
-- **Custom instructions**: `.github/copilot-instructions.md`
+```bash
+make install          # creates .venv, installs everything, sets up pre-commit hooks
+```
 
-### Claude Code (Terminal)
-- **Start**: `cd project && claude`
-- **Context file**: `CLAUDE.md` — read automatically at session start
-- **MCPs configured**: same 4 servers via `.mcp.json`
+### 3. Try it — scrape some articles (no API keys needed!)
 
-### Cline (VS Code Extension — Install Separately)
-- VS Code marketplace: search `Cline`
-- Autonomous multi-step coding agent
-- Uses same Claude/OpenAI API keys as Claude Code
-- Best for: complex multi-file tasks without leaving VS Code
-- See [WORKFLOW.md](WORKFLOW.md) for setup guide
+```bash
+make scrape-tag TAG="ai-agents"
+```
+
+That's it. Articles are saved as Markdown in `data/knowledge/raw/medium/`.
+
+---
+
+## Medium Scraper
+
+The scraper uses **plain HTTP + RSS** to fetch articles. **No AI, no API keys needed** for scraping.
+It only needs cookies for member-only / private bookmark access.
+
+### Commands
+
+```bash
+make scrape                       # scrape your coding list (default)
+make scrape-tag TAG="ai-agents"   # scrape a public tag (no cookies needed)
+make scrape-tag TAG="python"
+make scrape-article URL="https://medium.com/@author/title-abc123"
+make scrape-list URL="https://medium.com/@user/list/name-abc123"
+make scrape-bookmarks             # scrape private bookmarks (needs cookies)
+make summarize                    # show digest of recent articles
+```
+
+### Save to a different directory / repo
+
+Every command supports `OUTPUT=path/to/dir` to save articles outside this repo:
+
+```bash
+make scrape OUTPUT=../my-knowledge-repo/articles
+make scrape-tag TAG="python" OUTPUT=C:/Users/Me/other-project/data
+```
+
+### Save into dated subfolders
+
+Add `DATED=1` to save into a `YYYY-MM-DD` subfolder (keeps each scrape run separate):
+
+```bash
+make scrape DATED=1                   # saves to data/.../2026-03-25/
+make scrape DATED=1 OUTPUT=../other   # combines both flags
+```
+
+Or use the raw CLI directly:
+
+```bash
+uv run python -m knowledge.medium_scraper --tag "ai-agents" --output ../other-repo/articles --dated
+```
+
+### Adding Medium Cookies (for bookmarks / member-only articles)
+
+1. Open Chrome/Edge, go to https://medium.com — make sure you are **logged in**
+2. Press **F12** -> **Application** tab -> **Cookies** -> `https://medium.com`
+3. Copy these cookie values from the table:
+
+| Cookie | Required | Notes |
+|--------|----------|-------|
+| `sid` | Yes | Session ID, valid for months |
+| `uid` | Yes | User ID, never changes |
+| `xsrf` | Recommended | XSRF token for API calls |
+| `cf_clearance` | Recommended | Cloudflare bypass token |
+
+4. Set in `.env`:
+
+```
+MEDIUM_COOKIES=sid=YOUR_SID; uid=YOUR_UID; xsrf=YOUR_XSRF; cf_clearance=YOUR_CF
+```
+
+5. Test it:
+
+```bash
+make scrape-bookmarks
+```
+
+---
+
+## .env Configuration
+
+```bash
+cp .env.example .env
+```
+
+**Only `MEDIUM_COOKIES` is needed to start scraping.** Everything else is optional:
+
+| Variable | Needed for | Required? |
+|----------|-----------|-----------|
+| `MEDIUM_COOKIES` | Bookmarks + member-only articles | Only for `--bookmarks` |
+| `ANTHROPIC_API_KEY` | BaseAgent (LLM chat) | Only if using BaseAgent |
+| `OPENAI_API_KEY` | BaseAgent with GPT models | Only if using GPT |
+| `TELEGRAM_BOT_TOKEN` | n8n Telegram notifications | Optional |
+| `GITHUB_TOKEN` | GitHub MCP in Copilot | Optional |
+
+---
+
+## Using Your Knowledge Base
+
+Once you have articles scraped, ask Copilot or Claude Code:
+
+```
+Read all .md files in data/knowledge/raw/medium/ and summarize insights on [topic]
+What do the saved articles say about multi-agent systems?
+```
+
+Add `use context7` to any prompt for live library documentation.
+
+---
+
+## n8n Workflows (optional)
+
+n8n adds a **visual UI** where you can easily switch the output directory and source list
+without touching the terminal. Both workflows are manual trigger (click to run).
+
+```bash
+npx n8n start    # opens at http://localhost:5678
+```
+
+Then: **Workflows** menu -> **Import from File** -> select a JSON from `n8n_workflows/`:
+
+| Workflow | What it does |
+|----------|-------------|
+| **00 -- Scrape Medium List** | Scrape articles, show results |
+| **01 -- Scrape + Summarize** | Scrape + print preview of each article |
+
+### What n8n gives you
+
+Open the **Configure** node and change these 4 variables at the top:
+
+```js
+const OUTPUT_DIR = 'C:\\Users\\Voelt\\other-repo\\articles';  // save to any folder/repo
+const MODE       = 'list';                                     // list / tag / article / feed / bookmarks
+const SOURCE     = 'https://medium.com/@user/list/name-123';  // URL or tag name
+const MAX        = 20;                                         // max articles
+```
+
+This is the n8n value-add: **visually switch output repo and source list** without editing any files.
+
+---
+
+## Code Quality
+
+```bash
+make check        # lint + typecheck + test (all at once)
+make lint         # ruff only
+make typecheck    # mypy only
+make test         # pytest only
+make test-cov     # pytest with coverage
+make format       # auto-format with ruff
+make help         # show all available commands
+```
+
+---
 
 ## Project Structure
 
 ```
-my-project/
-├── .github/
-│   └── copilot-instructions.md  ← Copilot context (edit for your project)
-├── .vscode/
-│   ├── settings.json            ← Python venv, PYTHONPATH, editor settings
-│   ├── extensions.json          ← Recommended extensions
-│   ├── launch.json              ← F5 debug configs
-│   └── mcp.json                 ← MCP servers for Copilot Chat
-├── src/                         ← Your Python package
-│   └── __init__.py
-├── tests/                       ← Pytest test suite
-│   └── __init__.py
-├── scripts/
-│   └── setup.bat                ← One-time venv + deps setup (Windows)
-├── .mcp.json                    ← MCP servers for Claude Code
-├── .gitignore                   ← Python + secrets
-├── .env.example                 ← API key template (safe to commit)
-├── .env                         ← Your actual keys (NEVER commit)
-├── CLAUDE.md                    ← Claude Code session context
-├── WORKFLOW.md                  ← Complete tool usage guide
-└── requirements.txt             ← Python dependencies
+src/
+  agents/base.py            -- BaseAgent (Anthropic + OpenAI)
+  knowledge/medium_scraper.py -- Medium article scraper (HTTP/RSS, no AI)
+  bot/telegram_bot.py       -- optional Telegram bot
+  utils/logger_config.py    -- logging setup
+
+data/knowledge/raw/medium/  -- scraped article Markdown files
+n8n_workflows/              -- 2 n8n workflow JSONs
+tests/                      -- test suite
 ```
 
-## Customization
+---
 
-1. Edit `.github/copilot-instructions.md` — tell Copilot about your project's conventions
-2. Edit `CLAUDE.md` — tell Claude Code what the project does and its priorities
-3. Add your `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` to `.env`
-4. Add `BRAVE_API_KEY` to `.env` for live web search in AI tools (free tier: 2000/month)
-5. Add `GITHUB_TOKEN` to `.env` for GitHub MCP (commits, history, blame)
+## MCP Servers
 
-## Included AI Tools Comparison
+Configured in `.vscode/mcp.json` — extend Copilot and Claude Code.
 
-| Tool | Type | Cost | Best For |
-|------|------|------|---------|
-| GitHub Copilot | VS Code inline | ~€10/month | Day-to-day autocomplete |
-| Copilot Chat | VS Code chat | Included | File-level Q&A, quick fixes |
-| Claude Code | Terminal agent | Pay-per-use | Multi-file tasks, architecture |
-| Cline | VS Code agent | Pay-per-use | Autonomous coding in IDE |
-| Continue | VS Code | Free + local LLM option | Private/offline coding |
-| Aider | Terminal | Free + API cost | Quick multi-file from terminal |
+| Server | Purpose | Setup |
+|--------|---------|-------|
+| **filesystem** | Read/write project files | Auto |
+| **sequential-thinking** | Step-by-step reasoning | Auto |
+| **context7** | Live library docs | Auto (free) |
+| **github** | Commits, PRs, issues | `GITHUB_TOKEN` in `.env` |
