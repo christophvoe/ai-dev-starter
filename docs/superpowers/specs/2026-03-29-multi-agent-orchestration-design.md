@@ -87,9 +87,17 @@ At any phase, status can become `BLOCKED | PAUSED | STOPPED`.
 
 ### Agent assignment rule
 
-**Default: always the other agent.** If Copilot planned → Claude implements. If Claude implemented → Copilot reviews. If Copilot reviewed → Claude fixes. This alternating pattern keeps each agent working from a fresh perspective.
+**Default: same agent plans, implements, AND does the first review.** This keeps context intact — the agent that planned knows the intent best.
 
-**Override**: human can direct a specific agent by replying via Telegram before unblocking, or by editing `session.json` `agent` field. The orchestrator respects whatever is in the field — it never auto-assigns over a human override.
+Only the **second review** (after FIXING) switches to the other agent. Fresh eyes only when actually needed, not on every phase.
+
+```
+Copilot plans → Copilot implements → Copilot reviews (first)
+  → if FIXING needed → Claude reviews (second, fresh perspective)
+  → if FIXING needed again → human intervenes (BLOCKED)
+```
+
+**Override**: human can direct a specific agent via Telegram before unblocking, or by editing `session.json` `agent` field directly. The orchestrator never auto-assigns over a human override.
 
 ---
 
@@ -324,28 +332,139 @@ Strips this repo to a clean starting state for a new project:
 | File | Action | Purpose |
 |------|--------|---------|
 | `src/agents/orchestrator.py` | Create | State machine logic, loop prevention, Telegram triggers |
+| `src/agents/onboarding.py` | Create | Interactive onboarding agent (BaseAgent-powered) |
 | `docs/orchestration/session.json` | Create | Live session state |
 | `docs/orchestration/handoff.md` | Create | Agent-to-agent content transfer |
 | `docs/orchestration/human_input.md` | Create | Telegram → agent input channel |
+| `docs/PROJECT.md` | Create (by onboarding) | One-page project brief |
 | `tests/test_orchestrator.py` | Create | Tests for orchestrator logic |
+| `tests/test_onboarding.py` | Create | Tests for onboarding agent |
 | `.github/copilot-instructions.md` | Create | Copilot equivalent of CLAUDE.md |
 | `.github/agents/orchestrator.agent.md` | Rewrite | Add enforced ✅/❌ gates |
 | `.github/agents/planner.agent.md` | Rewrite | Add enforced gates + handoff |
 | `.github/agents/tdd.agent.md` | Rewrite | Add enforced gates + handoff |
 | `.github/agents/debugger.agent.md` | Rewrite | Add enforced gates + handoff |
 | `.github/agents/code-reviewer.agent.md` | Rewrite | Add enforced gates + handoff |
+| `.github/agents/setup.agent.md` | Create | Copilot onboarding agent |
 | `src/bot/telegram_bot.py` | Modify | New commands + free-form input handler |
 | `src/bot/notify.py` | Modify | Session summary + document sending |
-| `.github/workflows/ci.yml` | Modify | session.json integration + Telegram on failure |
-| `Makefile` | Modify | Add orchestrate-* and template-clean targets |
+| `.github/workflows/ci.yml` | Modify | Telegram on failure (reads session.json, no write) |
+| `Makefile` | Modify | orchestrate-*, template-clean, onboard targets |
 | `TEMPLATE.md` | Create | New project setup checklist |
-| `CLAUDE.md` | Modify | Add orchestration protocol section |
+| `CLAUDE.md` | Modify | Add orchestration protocol + skills inventory section |
+| `docs/WORKTREES.md` | Modify | Integrate with orchestrator worktree support |
 
 ---
 
-## 12. Out of Scope
+## 12. Skills & Agents Inventory
+
+A clear reference of every agent and skill, what it does, and when to use it. Both tools load this so new projects start with full clarity.
+
+### Claude Code (superpowers skills)
+
+| Skill | When to invoke | Gate |
+|-------|---------------|------|
+| `brainstorming` | Before any new feature or design decision | Hard — no code before spec |
+| `writing-plans` | After spec approved | Hard — no implementation before plan |
+| `test-driven-development` | During implementation | Hard — failing test before production code |
+| `systematic-debugging` | Any bug or unexpected behavior | Hard — root cause before fix |
+| `verification-before-completion` | Before claiming done | Hard — run commands, show output |
+| `subagent-driven-development` | Executing multi-task plans | Delegates to subagents per task |
+| `using-git-worktrees` | Parallel feature work or parallel agents | Creates isolated branch per agent |
+| `requesting-code-review` | After implementation, before merge | Structured review checklist |
+| `finishing-a-development-branch` | When all tests pass and ready to integrate | Merge / PR / cleanup options |
+
+### GitHub Copilot (agents)
+
+| Agent | When to invoke | Key gate |
+|-------|---------------|---------|
+| `@planner` | Design + plan before coding | ✅ Write plan to handoff.md first |
+| `@orchestrator` | End-to-end feature work | ✅ Check session.json before starting |
+| `@tdd` | TDD implementation | ✅ Failing test before production code |
+| `@debugger` | Bugs, test failures | ✅ Root cause before fix proposal |
+| `@code-reviewer` | Review after implementation | ✅ Output to handoff.md, then orchestrate-next |
+| `@setup` *(new)* | Onboarding a new project | ✅ Ask all questions before writing any config |
+
+---
+
+## 13. Worktrees Integration
+
+Git worktrees let two agents work simultaneously on different branches without file conflicts.
+
+### When to use worktrees
+
+- A feature is large enough that Copilot implements while Claude reviews a previous PR
+- Parallel tasks from the implementation plan that touch different files
+- The orchestrator detects two independent tasks in the plan → suggests worktree setup
+
+### Worktree naming convention
+
+```bash
+# Main agent workspace (current repo)
+ai-dev-starter/           → branch: feat/task-name
+
+# Second agent worktree (sibling directory)
+../ai-dev-starter-agent2/ → branch: feat/task-name-review
+```
+
+### Orchestrator worktree support
+
+`make orchestrate-start` gains an optional `WORKTREE=1` flag:
+- Creates a sibling worktree automatically
+- Updates session.json with `"worktree": "../ai-dev-starter-agent2"`
+- Telegram message tells the second agent exactly which directory to work from
+- On `make orchestrate-done`: merges worktree branch, removes worktree
+
+### Branch visibility
+
+Both agents see the same git history. The reviewing agent pulls the implementation branch into its worktree — no need to copy files.
+
+---
+
+## 14. Onboarding Agent (`@setup` / `make onboard`)
+
+An interactive agent that guides setup of a new project from this template. Available as both a Copilot agent (`@setup`) and a Claude Code command (`make onboard`).
+
+### What it does
+
+Runs a structured conversation (5–8 questions), then writes all config automatically so the developer knows exactly where to start.
+
+### Questions it asks
+
+1. **Project name and description** — what are you building?
+2. **Project type** — Python app / API / scraper / data pipeline / other
+3. **External services** — which APIs, databases, or services will this project use? (sets up `.env.example` with the right variables)
+4. **Team setup** — solo dev or team? (configures review strictness)
+5. **Preferred starting agent** — Copilot-first or Claude-first?
+6. **Parallel work** — want worktrees enabled for parallel agent tasks?
+7. **Telegram** — have a bot token and chat ID? (configures notifications)
+8. **Knowledge base** — any Medium lists or tags to pre-scrape for this domain?
+
+### What it outputs
+
+After the conversation:
+
+| Output | Where |
+|--------|-------|
+| Project-specific `CLAUDE.md` section | Appended to existing CLAUDE.md |
+| Updated `.github/copilot-instructions.md` | Project name, goal, key APIs |
+| Configured `.env.example` | Only the variables this project needs |
+| Initial `docs/orchestration/session.json` | Empty session, ready to start |
+| `docs/PROJECT.md` | One-page project brief: goal, stack, conventions |
+| First `make orchestrate-start` command | Printed to terminal, ready to copy |
+
+### Implementation
+
+- Claude Code: `make onboard` → runs `src/agents/onboarding.py` → uses `BaseAgent` for the conversation → writes files
+- Copilot: `@setup` agent definition in `.github/agents/setup.agent.md` — same questions, writes same files via chat
+- Both produce identical output so either tool can be used for setup
+
+---
+
+## 15. Out of Scope
 
 - n8n workflow automation (separate concern)
 - Multi-repo orchestration (this repo only)
 - Real-time agent streaming (agents complete full phases before handoff)
 - Automatic git commits by orchestrator (human always commits)
+- Automatic worktree merge (human reviews and merges)
