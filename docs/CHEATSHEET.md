@@ -23,20 +23,20 @@
 
 ### GitHub Copilot agent commands (Copilot Chat)
 
-Full workflow order (use what you need, skip what you don't):
+**Normal flow — @orchestrator does it all:**
 ```
-@brainstorm  "should we use RSS or scrape HTML for dev.to?"   ← explore options first
-@planner     plan: add dev.to scraper                         ← concrete plan, no code
-@tdd         implement: add dev.to scraper                    ← TDD implementation
-@orchestrator implement: add --verbose flag to CLI            ← full plan+implement+test+review
-@debugger    fix: TypeError in article_curator.py line 45     ← root cause first
-@code-reviewer review src/knowledge/medium_scraper.py         ← structured review
-@setup       (interactive onboarding for new projects)
+@orchestrator implement: add --verbose flag to CLI   ← plan + implement + test + review in one pass
 ```
 
-Typical flow for a real feature:
-```
-@brainstorm → @planner → make orchestrate-start → @tdd → @code-reviewer
+**Specialist agents — use only when you hit the specific situation:**
+
+```text
+@brainstorm   "should we use RSS or scrape HTML for dev.to?"  ← approach is genuinely unclear
+@planner      plan: add dev.to scraper                        ← want human to approve plan first
+@tdd          implement: add dev.to scraper                   ← TDD only, no full orchestration
+@debugger     fix: TypeError in article_curator.py line 45    ← bug, root cause first
+@code-reviewer review src/knowledge/medium_scraper.py         ← standalone review
+@setup        (interactive onboarding for a new project)
 ```
 
 ### Useful prompts for chat (no command needed)
