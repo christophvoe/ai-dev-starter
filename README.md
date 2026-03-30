@@ -1,6 +1,7 @@
 # AI Dev Starter
 
-A Python starter template with a Medium knowledge scraper, multi-LLM agent, and n8n automation.
+A Python starter template with a Medium knowledge scraper, multi-LLM agent, Telegram notifications,
+and dual AI tooling (GitHub Copilot + Claude Code with superpowers).
 
 ---
 
@@ -17,6 +18,10 @@ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```bash
 make install          # creates .venv, installs everything, sets up pre-commit hooks
 ```
+
+> **WSL users**: Don't run `make` from WSL on `/mnt/c/` — the Windows `.venv` has
+> `Scripts/` which WSL can't modify. Either run `make` from **PowerShell** (recommended),
+> or clone the repo natively inside WSL (e.g., `~/ai-dev-starter`) and run `make install` there.
 
 ### 3. Try it — scrape some articles (no API keys needed!)
 
@@ -127,6 +132,35 @@ Add `use context7` to any prompt for live library documentation.
 
 ---
 
+## Telegram Notifications
+
+Remote monitoring and control via Telegram bot.
+
+```bash
+# Set up in .env:
+TELEGRAM_BOT_TOKEN=your-token
+TELEGRAM_CHAT_ID=your-chat-id
+TELEGRAM_USER_ID=your-user-id
+
+# Send a message:
+make notify MSG="Scrape complete — 15 new articles"
+
+# Start interactive bot:
+make bot
+```
+
+Bot commands: `/status`, `/scrape`, `/discover`, `/ask`, `/help`
+
+Programmatic notifications from Python:
+
+```python
+from bot.notify import send_message, send_scrape_report
+await send_message("Build passed!")
+await send_scrape_report(results)
+```
+
+---
+
 ## n8n Workflows (optional)
 
 n8n adds a **visual UI** where you can easily switch the output directory and source list
@@ -176,15 +210,51 @@ make help         # show all available commands
 
 ```
 src/
-  agents/base.py            -- BaseAgent (Anthropic + OpenAI)
-  knowledge/medium_scraper.py -- Medium article scraper (HTTP/RSS, no AI)
-  bot/telegram_bot.py       -- optional Telegram bot
-  utils/logger_config.py    -- logging setup
+  agents/base.py                -- BaseAgent (Anthropic + OpenAI)
+  knowledge/medium_scraper.py   -- Medium article scraper + TrendDiscoverer (HTTP/RSS)
+  knowledge/article_curator.py  -- ArticleCurator: LLM-powered article selection
+  bot/telegram_bot.py           -- Telegram bot: /status, /scrape, /discover, /ask, /help
+  bot/notify.py                 -- Telegram notifications (standalone)
+  utils/logger_config.py        -- logging setup (UTF-8 safe for Windows)
 
-data/knowledge/raw/medium/  -- scraped article Markdown files
-n8n_workflows/              -- 2 n8n workflow JSONs
-tests/                      -- test suite
+data/knowledge/raw/medium/      -- scraped article Markdown files
+n8n_workflows/                  -- 2 n8n workflow JSONs
+tests/                          -- test suite (60 tests)
+
+.github/agents/                 -- Copilot agents (orchestrator, tdd, debugger, planner, code-reviewer)
+.github/instructions/           -- Copilot instruction files
+.claude/commands/               -- Claude Code slash commands
+.claude/rules/                  -- Claude Code rules
 ```
+
+---
+
+## AI Tooling
+
+Both GitHub Copilot and Claude Code are configured with parallel customization:
+
+| Tool | Config Location | Key Features |
+|------|----------------|--------------|
+| **Copilot** | `.github/agents/`, `.github/instructions/` | @orchestrator, @tdd, @debugger, @planner, @code-reviewer |
+| **Claude Code** | `.claude/commands/`, `.claude/rules/`, `CLAUDE.md` | /implement, /review, /test + superpowers plugin |
+
+**Superpowers** (Claude Code plugin): brainstorming, TDD, subagent-driven development,
+systematic debugging, verification-before-completion. Install:
+
+```bash
+# In Claude Code terminal:
+/plugin install superpowers@claude-plugins-official
+```
+
+### Agent Collaboration Workflow
+
+```
+Copilot implements → git push → Claude Code reviews (or vice versa)
+                         ↓
+                   GitHub PR → Telegram notification
+```
+
+See [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) for the full tools guide.
 
 ---
 

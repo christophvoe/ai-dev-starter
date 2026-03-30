@@ -47,7 +47,7 @@ import logging
 import re
 import time
 import zipfile
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -207,6 +207,319 @@ class Article:
         return f"{safe[:60]}-{uid}"
 
 
+@dataclass
+class DiscoveredArticle:
+    """A candidate article found during trend discovery, scored by relevance."""
+
+    title: str
+    url: str
+    author: str
+    claps: int = 0
+    responses: int = 0
+    reading_time: int = 0
+    tags: list[str] = field(default_factory=list)
+    summary: str = ""
+    relevance_score: float = 0.0
+    source_tag: str = ""
+
+    @property
+    def engagement_score(self) -> float:
+        """Simple engagement score from claps + responses."""
+        return float(self.claps) + float(self.responses) * 10.0
+
+
+class TrendDiscoverer:
+    """
+    Discover trending/hot articles from Medium tags and RSS feeds.
+
+    Scores articles by engagement (claps, responses) and optionally filters
+    by keyword relevance. Can use an LLM to assess article quality if an
+    API key is available.
+
+    Usage:
+        discoverer = TrendDiscoverer(cookie_string="sid=...; uid=...")
+        candidates = discoverer.discover_from_tags(
+            tags=["ai-agents", "llm", "n8n", "automation"],
+            keywords=["agent", "trading", "scraper", "Claude"],
+            max_per_tag=15,
+        )
+        # candidates are sorted by relevance_score (highest first)
+        for c in candidates[:10]:
+            print(f"{c.relevance_score:.1f} | {c.title}")
+    """
+
+    def __init__(self, cookie_string: str = "") -> None:
+        self._cookie_string = cookie_string
+        self._headers = HEADERS
+
+    def _get(self, url: str, timeout: int = 15) -> requests.Response:
+        """GET with optional curl_cffi for Cloudflare bypass."""
+        if self._cookie_string and _CURL_AVAILABLE:
+            cookies_dict: dict[str, str] = {}
+            for part in self._cookie_string.split(";"):
+                k, _, v = part.strip().partition("=")
+                if k:
+                    cookies_dict[k.strip()] = v.strip()
+            return cf_requests.get(
+                url,
+                headers=self._headers,
+                cookies=cookies_dict,
+                impersonate="chrome120",
+                verify=False,
+                timeout=timeout,
+            )
+        return requests.get(url, headers=self._headers, timeout=timeout)
+
+    def discover_from_tags(
+        self,
+        tags: list[str],
+        keywords: list[str] | None = None,
+        max_per_tag: int = 15,
+        min_score: float = 0.0,
+    ) -> list[DiscoveredArticle]:
+        """
+        Discover trending articles from multiple Medium tags via RSS.
+
+        Fetches RSS feeds for each tag, extracts metadata, scores by engagement
+        and keyword relevance, deduplicates, and returns sorted candidates.
+        """
+        all_candidates: list[DiscoveredArticle] = []
+        seen_urls: set[str] = set()
+
+        for tag in tags:
+            feed_url = f"https://medium.com/feed/tag/{tag}"
+            log.info("Discovering from tag '%s'...", tag)
+            try:
+                feed = feedparser.parse(feed_url)
+                entries = feed.entries[:max_per_tag]
+            except Exception as e:
+                log.warning("Failed to parse feed for tag '%s': %s", tag, e)
+                continue
+
+            for entry in entries:
+                url = (entry.get("link") or "").split("?")[0].rstrip("/")
+                if not url or url in seen_urls:
+                    continue
+                seen_urls.add(url)
+
+                title = entry.get("title", "")
+                author = entry.get("author", "Unknown")
+                entry_tags = [t.get("term", "") for t in entry.get("tags", [])]
+                raw_summary = entry.get("summary", "")
+                summary = BeautifulSoup(raw_summary, "lxml").get_text(strip=True)[:300]
+
+                candidate = DiscoveredArticle(
+                    title=title,
+                    url=url,
+                    author=author,
+                    tags=entry_tags,
+                    summary=summary,
+                    source_tag=tag,
+                )
+                candidate.relevance_score = self._score_candidate(candidate, keywords)
+                all_candidates.append(candidate)
+
+            time.sleep(REQUEST_DELAY)
+
+        # Sort by relevance (highest first), filter by min_score
+        all_candidates.sort(key=lambda c: c.relevance_score, reverse=True)
+        if min_score > 0:
+            all_candidates = [c for c in all_candidates if c.relevance_score >= min_score]
+
+        log.info(
+            "Discovered %d candidates from %d tags (after dedup)",
+            len(all_candidates),
+            len(tags),
+        )
+        return all_candidates
+
+    def discover_from_page(
+        self,
+        page_url: str,
+        keywords: list[str] | None = None,
+    ) -> list[DiscoveredArticle]:
+        """
+        Discover articles from any Medium page (tag page, publication, etc.).
+
+        Extracts article URLs from the HTML and scores them.
+        """
+        try:
+            resp = self._get(page_url, timeout=15)
+            if resp.status_code != 200:
+                log.error("Page returned HTTP %d: %s", resp.status_code, page_url)
+                return []
+        except Exception as e:
+            log.error("Failed to fetch %s: %s", page_url, e)
+            return []
+
+        soup = BeautifulSoup(resp.text, "lxml")
+        candidates: list[DiscoveredArticle] = []
+        seen: set[str] = set()
+
+        for a_tag in soup.find_all("a", href=True):
+            href = a_tag["href"]
+            if href.startswith("/"):
+                href = f"https://medium.com{href}"
+            href = href.split("?")[0].rstrip("/")
+
+            if not _MEDIUM_ARTICLE_RE.match(href):
+                continue
+            if href in seen or "/list/" in href or "/m/signin" in href:
+                continue
+            seen.add(href)
+
+            title = a_tag.get_text(strip=True)
+            if len(title) < 10:
+                parent = a_tag.find_parent(["div", "article", "section"])
+                if parent:
+                    heading = parent.find(["h2", "h3", "h1"])
+                    if heading:
+                        title = heading.get_text(strip=True)
+
+            candidate = DiscoveredArticle(title=title, url=href, author="")
+            candidate.relevance_score = self._score_candidate(candidate, keywords)
+            candidates.append(candidate)
+
+        candidates.sort(key=lambda c: c.relevance_score, reverse=True)
+        log.info("Discovered %d articles from page %s", len(candidates), page_url)
+        return candidates
+
+    def enrich_with_metadata(
+        self, candidates: list[DiscoveredArticle], max_enrich: int = 20
+    ) -> list[DiscoveredArticle]:
+        """
+        Fetch each candidate's page to extract clap count, response count,
+        and reading time. Re-scores after enrichment.
+        """
+        for candidate in candidates[:max_enrich]:
+            try:
+                resp = self._get(candidate.url, timeout=10)
+                if resp.status_code != 200:
+                    continue
+                html = resp.text
+
+                claps = self._extract_clap_count(html)
+                responses = self._extract_response_count(html)
+                reading_time = self._extract_reading_time(html)
+
+                candidate.claps = claps
+                candidate.responses = responses
+                candidate.reading_time = reading_time
+
+                engagement_bonus = min(candidate.engagement_score / 100.0, 5.0)
+                candidate.relevance_score += engagement_bonus
+
+                time.sleep(REQUEST_DELAY)
+            except Exception as e:
+                log.debug("Could not enrich %s: %s", candidate.url, e)
+
+        candidates.sort(key=lambda c: c.relevance_score, reverse=True)
+        return candidates
+
+    def _score_candidate(self, candidate: DiscoveredArticle, keywords: list[str] | None) -> float:
+        """Score a candidate by keyword match in title, tags, and summary."""
+        score = 1.0  # base score for appearing in an RSS feed
+
+        if not keywords:
+            return score
+
+        title_lower = candidate.title.lower()
+        summary_lower = candidate.summary.lower()
+        tags_lower = " ".join(candidate.tags).lower()
+        text = f"{title_lower} {summary_lower} {tags_lower}"
+
+        for kw in keywords:
+            kw_lower = kw.lower()
+            if kw_lower in title_lower:
+                score += 3.0  # title match is strongest signal
+            elif kw_lower in tags_lower:
+                score += 2.0
+            elif kw_lower in text:
+                score += 1.0
+
+        return score
+
+    @staticmethod
+    def _extract_clap_count(html: str) -> int:
+        """Extract clap count from Medium page HTML or Apollo state."""
+        match = re.search(r'"clapCount"\s*:\s*(\d+)', html)
+        if match:
+            return int(match.group(1))
+        match = re.search(r"(\d+(?:\.\d+)?[KkMm]?)\s*claps?", html)
+        if match:
+            return _parse_count(match.group(1))
+        return 0
+
+    @staticmethod
+    def _extract_response_count(html: str) -> int:
+        """Extract response/comment count from page."""
+        match = re.search(r'"postResponses"\s*:\s*\{[^}]*"count"\s*:\s*(\d+)', html)
+        if match:
+            return int(match.group(1))
+        match = re.search(r"(\d+)\s*responses?", html)
+        if match:
+            return int(match.group(1))
+        return 0
+
+    @staticmethod
+    def _extract_reading_time(html: str) -> int:
+        """Extract reading time in minutes."""
+        match = re.search(r'"readingTime"\s*:\s*([\d.]+)', html)
+        if match:
+            return int(float(match.group(1)))
+        match = re.search(r"(\d+)\s*min\s*read", html)
+        if match:
+            return int(match.group(1))
+        return 0
+
+    def print_report(self, candidates: list[DiscoveredArticle], top_n: int = 20) -> None:
+        """Print a formatted report of discovered articles (Windows-safe UTF-8 output)."""
+        import contextlib
+        import sys
+
+        out = sys.stdout
+        # On Windows the default stdout may be cp1252 — reconfigure to UTF-8
+        if hasattr(out, "reconfigure"):
+            with contextlib.suppress(Exception):
+                out.reconfigure(encoding="utf-8", errors="replace")
+
+        out.write(f"\n{'=' * 80}\n")
+        out.write(f"  TRENDING ARTICLES — Top {min(top_n, len(candidates))} of {len(candidates)}\n")
+        out.write(f"{'=' * 80}\n\n")
+
+        for i, c in enumerate(candidates[:top_n], 1):
+            engagement = f"claps:{c.claps}" if c.claps else ""
+            responses = f"replies:{c.responses}" if c.responses else ""
+            reading = f"{c.reading_time}min" if c.reading_time else ""
+            meta = "  ".join(filter(None, [engagement, responses, reading]))
+
+            title = c.title.encode("utf-8", errors="replace").decode("utf-8")
+            out.write(f"  {i:2d}. [{c.relevance_score:.1f}] {title}\n")
+            out.write(f"      {c.url}\n")
+            if meta:
+                out.write(f"      {meta}\n")
+            if c.tags:
+                out.write(f"      Tags: {', '.join(c.tags[:5])}\n")
+            out.write("\n")
+        out.flush()
+
+
+def _parse_count(raw: str) -> int:
+    """Parse '1.2K' or '3M' into integer."""
+    raw = raw.strip()
+    multiplier = 1
+    if raw.endswith(("K", "k")):
+        multiplier = 1000
+        raw = raw[:-1]
+    elif raw.endswith(("M", "m")):
+        multiplier = 1_000_000
+        raw = raw[:-1]
+    try:
+        return int(float(raw) * multiplier)
+    except ValueError:
+        return 0
+
+
 class MediumScraper:
     """
     Fetches Medium articles via RSS and saves them as Markdown + JSON metadata.
@@ -234,7 +547,7 @@ class MediumScraper:
         self._meta_dir.mkdir(parents=True, exist_ok=True)
         self._cookie_string = cookie_string  # used for Cloudflare bypass via curl_cffi
 
-    def _get(self, url: str, **kwargs) -> requests.Response:
+    def _get(self, url: str, timeout: int = 15, allow_redirects: bool = True) -> requests.Response:
         """
         Make a GET request, using curl_cffi with Chrome impersonation when cookies
         are set (required to pass Cloudflare bot protection on Medium).
@@ -252,9 +565,10 @@ class MediumScraper:
                 cookies=cookies_dict,
                 impersonate="chrome120",
                 verify=False,
-                **kwargs,
+                timeout=timeout,
+                allow_redirects=allow_redirects,
             )
-        return requests.get(url, headers=HEADERS, **kwargs)
+        return requests.get(url, headers=HEADERS, timeout=timeout, allow_redirects=allow_redirects)
 
     # ------------------------------------------------------------------
     # High-level convenience
@@ -1470,6 +1784,15 @@ def main():
         action="store_true",
         help="Print a digest of the most recent articles in the knowledge base (no scraping)",
     )
+    group.add_argument(
+        "--discover",
+        action="store_true",
+        help=(
+            "Discover trending/hot articles from Medium tags. "
+            "Use with --discover-tags and --keywords to filter. "
+            "Shows a ranked report. Add --scrape-top N to auto-scrape the top N."
+        ),
+    )
     # --cookies is NOT in the exclusive group — it can combine with --list or --bookmarks
     parser.add_argument(
         "--cookies",
@@ -1494,6 +1817,53 @@ def main():
         "--dated",
         action="store_true",
         help="Save into a YYYY-MM-DD subfolder (e.g. data/.../2026-03-25/)",
+    )
+    # Discovery options (used with --discover)
+    parser.add_argument(
+        "--discover-tags",
+        metavar="TAGS",
+        dest="discover_tags",
+        help=(
+            "Tags to search for trending articles (comma-separated). "
+            "Example: --discover --discover-tags ai-agents,llm,automation"
+        ),
+    )
+    parser.add_argument(
+        "--keywords",
+        metavar="KEYWORDS",
+        dest="keywords",
+        help=(
+            "Keywords to score article relevance (comma-separated). "
+            "Higher score if keyword appears in title/tags/summary. "
+            "Example: --keywords agent,Claude,trading"
+        ),
+    )
+    parser.add_argument(
+        "--scrape-top",
+        metavar="N",
+        type=int,
+        default=0,
+        help="After discovery, automatically scrape the top N articles (default: 0 = report only)",
+    )
+    parser.add_argument(
+        "--enrich",
+        action="store_true",
+        help="Fetch each discovered article's page to get clap/response counts (slower)",
+    )
+    parser.add_argument(
+        "--curate",
+        action="store_true",
+        help=(
+            "Use an LLM (Claude/GPT) to evaluate and select the best articles. "
+            "Requires ANTHROPIC_API_KEY or OPENAI_API_KEY in .env"
+        ),
+    )
+    parser.add_argument(
+        "--curate-top",
+        metavar="N",
+        type=int,
+        default=10,
+        help="How many articles the LLM should select (default: 10)",
     )
 
     args = parser.parse_args()
@@ -1534,6 +1904,76 @@ def main():
         scraper.fetch_article_by_url(args.article)
     elif args.summarize:
         _print_digest(args.max, output_dir=output_dir)
+        return
+    elif args.discover:
+        default_tags = [
+            "ai-agents",
+            "llm",
+            "artificial-intelligence",
+            "automation",
+            "machine-learning",
+            "python",
+            "software-engineering",
+        ]
+        # Parse comma-separated tags/keywords
+        discover_tags = (
+            [t.strip() for t in args.discover_tags.split(",") if t.strip()]
+            if args.discover_tags
+            else default_tags
+        )
+        keywords = (
+            [k.strip() for k in args.keywords.split(",") if k.strip()] if args.keywords else None
+        )
+
+        discoverer = TrendDiscoverer(cookie_string=cookie_str)
+
+        candidates = discoverer.discover_from_tags(
+            tags=discover_tags,
+            keywords=keywords,
+            max_per_tag=args.max,
+        )
+
+        if args.enrich and candidates:
+            print(f"\nEnriching top {min(20, len(candidates))} articles with engagement data...")
+            candidates = discoverer.enrich_with_metadata(candidates, max_enrich=20)
+
+        # LLM-based curation: let an agent pick the best articles
+        if args.curate and candidates:
+            from knowledge.article_curator import ArticleCurator
+
+            try:
+                curator = ArticleCurator()
+                curated = curator.curate(
+                    candidates,
+                    keywords=keywords or [],
+                    top_n=args.curate_top,
+                )
+                if curated:
+                    candidates = curated
+                    print(f"\n  LLM selected {len(curated)} articles")
+            except OSError as e:
+                print(f"\n  Curation skipped (no API key): {e}")
+                print("  Set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env to enable curation.")
+
+        discoverer.print_report(candidates, top_n=args.max)
+
+        # Auto-scrape top N if requested
+        if args.scrape_top > 0 and candidates:
+            top = candidates[: args.scrape_top]
+            print(f"\nScraping top {len(top)} articles...")
+            for c in top:
+                try:
+                    article = scraper.fetch_article_by_url(c.url)
+                    if article:
+                        print(f"  [OK] {article.title[:70]}")
+                    time.sleep(REQUEST_DELAY)
+                except Exception as e:
+                    print(f"  [FAIL] {c.url}: {e}")
+            kb = scraper._raw_dir
+            saved = sorted(kb.glob("*.md"))
+            print(f"\nKnowledge base: {kb}")
+            print(f"Total articles saved: {len(saved)}")
+
         return
 
     # List what we have

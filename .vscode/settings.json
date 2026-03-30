@@ -72,7 +72,7 @@
   "github.copilot.chat.codeGeneration.useInstructionFiles": true,
   "github.copilot.chat.followUps": "always",
 
-  "workbench.colorTheme": "Default Dark Modern",
+  "workbench.colorTheme": "Dark Modern",
   "workbench.editor.wrapTabs": true,
   "workbench.panel.defaultLocation": "bottom",
   "workbench.startupEditor": "none",

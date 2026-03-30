@@ -1,0 +1,12 @@
+{
+  "task": "smoke test",
+  "phase": "DONE",
+  "agent": "claude",
+  "iterations": 0,
+  "failed_checks": 0,
+  "uncertainty": false,
+  "status": "DONE",
+  "started_at": "2026-03-30T19:54:18.433304+00:00",
+  "worktree": null,
+  "history": []
+}

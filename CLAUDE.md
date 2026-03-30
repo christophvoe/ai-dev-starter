@@ -14,14 +14,16 @@
 ```
 src/
   agents/base.py              -- BaseAgent: multi-LLM wrapper (Anthropic + OpenAI)
-  knowledge/medium_scraper.py -- Medium article scraper (pure HTTP, curl_cffi, RSS)
-  bot/telegram_bot.py         -- Optional Telegram bot
+  knowledge/medium_scraper.py -- Medium article scraper + TrendDiscoverer (HTTP, RSS)
+  knowledge/article_curator.py -- ArticleCurator: LLM-powered article selection agent
+  bot/telegram_bot.py         -- Telegram bot: /status, /scrape, /discover, /ask
+  bot/notify.py               -- Telegram notification module (standalone)
   utils/logger_config.py      -- Logging setup (UTF-8 safe for Windows)
 
 data/knowledge/raw/medium/    -- Scraped articles as Markdown
 data/knowledge/meta/          -- JSON metadata sidecars
-n8n_workflows/                -- 2 n8n workflow JSONs (visual config layer)
 tests/                        -- Test suite (pytest)
+Makefile                      -- Task runner (make check, make scrape, etc.)
 ```
 
 **Data flow**: CLI/n8n -> MediumScraper -> HTTP/RSS fetch -> HTML parse -> Markdown + JSON save
@@ -44,14 +46,20 @@ make test             # pytest only
 make format           # auto-format with ruff
 
 # Scraping
-make scrape           # Scrape coding list (default)
-make scrape-tag TAG="ai-agents"
-make scrape-bookmarks # Private bookmarks (needs cookies)
-make summarize        # Show article digest
+make scrape                                    # default coding list
+make scrape-list URL="https://medium.com/@user/list/name-abc123"
+make scrape-tag TAG="github copilot, claude code"
+make scrape-bookmarks
+make summarize
 
-# Save to different repo / dated subfolder
-make scrape OUTPUT=../other-repo/articles
-make scrape DATED=1   # saves into YYYY-MM-DD subfolder
+# Discovery + LLM curation
+make discover TAGS="ai-agents,llm" KEYWORDS="agent,Claude"
+make discover TAGS="ai-agents,llm" CURATE=1        # LLM picks the best
+make discover-scrape TAGS="ai-agents,llm" CURATE=1  # discover + auto-scrape
+
+# Save to custom dir / dated subfolder
+make scrape-list URL="..." OUTPUT="../other-repo/articles"
+make scrape-list URL="..." DATED=1                  # saves into YYYY-MM-DD subfolder
 ```
 
 ---
@@ -141,31 +149,60 @@ Flag edge cases during design before writing code.
 
 ---
 
-## 10. Agentic Workflow
+## 10. Superpowers (Claude Code Plugin)
+
+**Install** (run inside a Claude Code session, NOT in PowerShell):
+```
+1. Open terminal → type: claude
+2. Inside the Claude Code REPL, type: /plugin install superpowers@claude-plugins-official
+```
+⚠ `/plugin` is a Claude Code command — it does NOT work in PowerShell or bash.
+
+Superpowers provides enforced workflows. Key skills it activates automatically:
+- **brainstorming** -- Design before code. Explores approaches, writes specs.
+- **writing-plans** -- Detailed task-by-task implementation plans with TDD.
+- **subagent-driven-development** -- Fresh subagent per task + two-stage review.
+- **test-driven-development** -- Red-Green-Refactor enforced. No code without failing test.
+- **systematic-debugging** -- Root cause investigation before fixes. No guessing.
+- **verification-before-completion** -- Evidence before claims. Run commands, read output.
+- **using-git-worktrees** -- Isolated workspaces for parallel development.
+- **requesting-code-review** -- Structured review with spec compliance + quality checks.
+
+**Workflow**: brainstorming -> writing-plans -> subagent-driven-development -> finishing-a-development-branch
+
+Our `.claude/commands/` and `.claude/rules/` complement superpowers with project-specific context.
+
+---
+
+## 11. Agentic Workflow
 
 **Pattern**: Plan -> Implement -> Verify -> Adjust
 
-1. **Plan**: Describe approach before writing code. For complex tasks, propose a plan first.
-2. **Implement**: Work in small, testable chunks. One concern per commit.
-3. **Verify**: Run `make check` after changes. Confirm tests pass.
-4. **Adjust**: If tests fail or lint errors appear, fix before moving on.
-
-**Slash commands available**:
+**Slash commands** (project-specific, complement superpowers):
 - `/plan` -- Plan before coding
 - `/implement` -- Implement + test + self-review in one pass
 - `/review` -- Code review for quality and security
 - `/test` -- Generate tests for a file or feature
 - `/check` -- Run full quality gate (ruff + mypy + pytest)
 
+**Telegram notifications** (see `src/bot/notify.py`):
+- `make notify MSG="your message"` -- Send a message to Telegram
+- Scraper auto-notifies after runs via `send_scrape_report()`
+- Bot commands: /status, /scrape, /discover, /review, /check, /ask, /help
+
+**Automated code review** (see `src/agents/reviewer.py`):
+- `make review` -- AI reviews uncommitted changes (needs ANTHROPIC_API_KEY)
+- `make review BRANCH=feat/x` -- AI reviews a branch vs main
+- `make review NOTIFY=1` -- Review + send results to Telegram
+- Telegram `/review [branch]` -- trigger review from phone
+
 **Context management**:
 - Run `compact` when conversation gets long (>70% of context window)
 - Run `clear` when switching to a completely different task
-- Don't dump entire files when a targeted search suffices
 
 **Parallel agents with git worktrees** (see docs/WORKTREES.md):
 - Create worktrees for parallel work: `git worktree add ../agent-2 -b feature/task`
 - One agent implements, the other reviews the branch
-- Merge after review passes; remove worktree when done
 
 **MCP Servers available**:
 
@@ -178,10 +215,74 @@ Flag edge cases during design before writing code.
 
 ---
 
+## 12. Orchestration Protocol
+
+**State machine**: PLANNING → IMPLEMENTING → REVIEWING → DONE
+**Interrupt states**: BLOCKED (needs human), PAUSED (human command), STOPPED (terminated)
+
+**Shared state files** (in `docs/orchestration/`):
+
+- `session.json` — machine state (phase, agent, counters, status)
+- `handoff.md` — agent content: task, changed files with line numbers, output, uncertainty
+- `human_input.md` — free-form Telegram input for next agent pickup
+
+**Agent assignment rule**:
+
+- Same agent plans + implements + first review
+- Opposite agent only on second review (after FIXING cycle)
+
+**Loop prevention — triggers BLOCKED + Telegram alert**:
+
+- `iterations >= 3` (fix cycles)
+- `failed_checks >= 2` (quality gate failures)
+- `uncertainty = true` (agent flags uncertainty in handoff.md)
+
+**Orchestration commands**:
+
+```bash
+make orchestrate-start TASK="..." [AGENT=copilot] [WORKTREE=1]
+make orchestrate-status
+make orchestrate-next            # advance after review passes
+make orchestrate-next FAILED=1   # advance after review fails
+make orchestrate-block REASON="..."
+make orchestrate-resume
+make orchestrate-done
+make orchestrate-check-failed    # call after make check fails
+make orchestrate-explain         # send Explanation section to Telegram
+```
+
+**Handoff format** (`docs/orchestration/handoff.md`):
+
+```markdown
+## Task
+<what was done>
+
+## Changed Files
+- src/agents/orchestrator.py:45-78 (add phase transition logic)
+
+## Output
+<test results, key observations>
+
+## Explanation
+<plain English: what changed, why, how the key logic works>
+
+## Uncertainty
+None  (or describe what needs human input)
+```
+
+**Telegram control plane**:
+
+- `/status` — session state summary
+- `/pause` `/stop` `/resume` `/skip` — session control
+- Any free-form text → saved to `human_input.md` for next agent pickup
+
+---
+
 ## Conventions Summary
 
 - **uv** for deps (pyproject.toml + uv.lock)
 - **ruff** for lint/format, **mypy** for types, **pytest** for tests
 - **pre-commit** hooks enforce quality on every commit
+- **superpowers** plugin for enforced TDD, planning, review workflows
 - `PYTHONPATH=src` -- import as `from agents.base import BaseAgent`
 - Secrets in `.env` -- see `.env.example` for template

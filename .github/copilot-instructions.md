@@ -1,108 +1,139 @@
-# AI Dev Starter — Copilot Instructions
+# AI Dev Starter — GitHub Copilot Context
 
-> GitHub Copilot reads this for every chat interaction in this workspace.
-> Lean by design — details in `.github/instructions/` and `.github/agents/`.
+> Auto-loaded by Copilot for every chat interaction. Keep under 400 lines.
 
 ---
 
-## Project
+## 1. Architecture
 
-- **Type**: Python 3.12+ application with Medium scraper, multi-LLM agent, n8n automation
-- **Deps**: uv (pyproject.toml + uv.lock), `.venv` managed by uv
-- **PYTHONPATH**: `src` (injected by `.vscode/settings.json`)
-- **Imports**: Absolute from src root: `from agents.base import BaseAgent`
+**Type**: Python 3.12+ application | **Deps**: uv (pyproject.toml + uv.lock)
+**PYTHONPATH=src** — import as `from agents.base import BaseAgent`
 
-## Commands
+```
+src/
+  agents/base.py              — BaseAgent: multi-LLM wrapper (Anthropic + OpenAI)
+  agents/orchestrator.py      — State machine: PLANNING→IMPLEMENTING→REVIEWING→DONE
+  agents/onboarding.py        — Interactive new-project setup agent
+  knowledge/medium_scraper.py — Medium article scraper (HTTP/RSS, no AI needed)
+  knowledge/article_curator.py — LLM-powered article curation
+  bot/telegram_bot.py         — Telegram bot: remote control + free-form human input
+  bot/notify.py               — Telegram notifications (standalone)
+  utils/logger_config.py      — Logging setup
+
+docs/orchestration/           — Session state (session.json, handoff.md, human_input.md)
+```
+
+---
+
+## 2. Orchestration Protocol
+
+**ALWAYS check session state before starting any work.**
 
 ```bash
-make check        # lint + typecheck + test (run before every commit)
-make test         # pytest only
-make lint         # ruff only
-make typecheck    # mypy only
-make format       # auto-format with ruff
-make scrape       # scrape coding list (default)
-make scrape-tag TAG="ai-agents"
-make scrape OUTPUT=../other-repo/articles  # save elsewhere
-make scrape DATED=1   # save into YYYY-MM-DD subfolder
+make orchestrate-status      # see current phase, agent, task
 ```
 
-## Code Style
-
-- ruff (line-length 100) + mypy strict on src/
-- snake_case functions/variables, PascalCase classes, UPPER_SNAKE_CASE constants
-- Double quotes, absolute imports, `Path(__file__).resolve().parent` for paths
-- Functions under ~50 lines; extract helpers when longer
-- Secrets in `.env` via python-dotenv — NEVER hardcode
-
-## Testing
-
-- pytest in tests/, files named test_*.py
-- Write tests for new features and bug fixes
-- Use unittest.mock for external calls
-- Prefer single test file when iterating: `uv run pytest tests/test_specific.py -v`
-
-## Error Handling
-
-- Validate at system boundaries (user input, APIs, HTTP responses)
-- Trust internal code — don't over-validate
-- Specific exceptions, not bare `except:`
-- Log with context: `logger.error("Failed to fetch %s: %s", url, e)`
-
-## Security
-
-- Secrets in `.env` only — never in code or logs
-- Validate all external input
-- Pin dependency versions (uv.lock)
-- Never let agents auto-install packages without review
-
-## Git
-
-- Commit format: `type(scope): description` (feat, fix, refactor, docs, test, chore)
-- Pre-commit hooks run ruff + mypy + tests
-- Run `make check` before pushing
-
-## Architecture
-
+The session state machine:
 ```
-src/agents/base.py            — BaseAgent (Anthropic + OpenAI)
-src/knowledge/medium_scraper.py — Medium scraper (HTTP/RSS, no AI)
-src/bot/telegram_bot.py       — Optional Telegram bot
-src/utils/logger_config.py    — Logging (UTF-8 safe for Windows)
-data/knowledge/raw/medium/    — Scraped article Markdown
-tests/                        — Test suite
+PLANNING → IMPLEMENTING → REVIEWING → DONE
+                               ↓ (if review fails)
+                            FIXING → REVIEWING (other agent)
 ```
 
-## MCP Servers
+**Shared files** (both tools read/write these):
+- `docs/orchestration/session.json` — current phase, agent, iteration count
+- `docs/orchestration/handoff.md` — plan / output / changed files for pickup
+- `docs/orchestration/human_input.md` — guidance from Telegram, read at phase start
 
-| Server | Purpose | Setup |
-|--------|---------|-------|
-| **filesystem** | Read/write project files | Auto |
-| **sequential-thinking** | Step-by-step reasoning | Auto |
-| **context7** | Live library docs | Auto (free, no key needed) |
-| **github** | Commits, PRs, issues | `GITHUB_TOKEN` in `.env` |
-
-### Using Context7
-Add `use context7` to any prompt for live library documentation:
-```
-How do I configure pydantic-ai with streaming? use context7
-What is the LangGraph supervisor pattern? use context7
-```
-
-### Using Knowledge Base via Filesystem MCP
-```
-Read all .md files in data/knowledge/raw/medium/ and summarize insights on [topic]
+**Key commands:**
+```bash
+make orchestrate-start TASK="description"   # new session
+make orchestrate-next                        # advance phase + notify Telegram
+make orchestrate-next FAILED=1               # review failed, go to FIXING
+make orchestrate-block REASON="..."         # flag uncertainty, pause, notify human
+make orchestrate-resume                      # human cleared it, continue
+make orchestrate-done                        # session complete
+make orchestrate-check-failed               # make check failed, increment counter
 ```
 
-## Cross-Tool Workflow (Copilot + Claude Code)
+---
 
-Both tools share the same project knowledge via parallel config files.
-Use them together for maximum productivity:
+## 3. Agent Assignment Rule
 
-- **`@orchestrator`** — End-to-end: plan + implement + test + review in one pass
-- **`@code-reviewer`** — Review changes made by either tool
-- **`@planner`** — Plan before implementing (read-only, no edits)
-- **`/implement`** — Implement + test + self-review
-- **`/review`**, **`/plan`**, **`/test`**, **`/check`** — Focused tasks
+**Same agent: plans + implements + first review.**
+Only after FIXING does the other agent review (fresh eyes).
 
-**Parallel agents**: Use git worktrees (see `docs/WORKTREES.md`) to run
-multiple agents on the same repo without file conflicts.
+```
+You plan → You implement → You review (first)
+  → FIXING needed? → Other agent reviews (second)
+  → FIXING again? → Human intervenes (BLOCKED)
+```
+
+---
+
+## 4. Code Style
+
+- **Formatter/Linter**: ruff (line-length 100)
+- **Type checker**: mypy (strict on src/)
+- **Imports**: absolute from src/ root — `from agents.base import BaseAgent`
+- **Naming**: snake_case functions/vars, PascalCase classes, UPPER_SNAKE_CASE constants
+- **Strings**: double quotes preferred
+- **Max function length**: ~50 lines — extract helpers if longer
+- **Paths**: `Path(__file__).resolve().parent` — never hardcoded strings
+- **Secrets**: via python-dotenv + `.env` — NEVER hardcoded or logged
+
+---
+
+## 5. Quality Gate
+
+Run before EVERY handoff or commit:
+```bash
+make check    # ruff + mypy + pytest (all at once)
+```
+
+If it fails twice: run `make orchestrate-check-failed` instead of pushing broken code.
+
+---
+
+## 6. Testing
+
+- pytest in `tests/test_*.py`
+- Mock ALL external calls: `@patch("module.requests.get")`
+- Test naming: `test_<function>_<scenario>`
+- Cover: happy path + None/empty + network errors + boundary conditions
+
+---
+
+## 7. Commit Format
+
+```
+type(scope): description
+
+Types: feat, fix, refactor, docs, test, chore
+Example: feat(orchestrator): add loop prevention triggers
+```
+
+---
+
+## 8. Skills Reference
+
+### This tool (Copilot agents)
+
+| Agent | When | Key gate |
+|-------|------|---------|
+| `@planner` | Design + plan | ✅ Write to handoff.md first |
+| `@orchestrator` | End-to-end feature | ✅ Check session.json, run gates |
+| `@tdd` | TDD implementation | ✅ Failing test before production code |
+| `@debugger` | Bugs/failures | ✅ Root cause before fix |
+| `@code-reviewer` | Review phase | ✅ Write to handoff.md, then orchestrate-next |
+| `@setup` | New project onboarding | ✅ Ask all questions before writing config |
+
+### Claude Code (superpowers skills)
+
+| Skill | When |
+|-------|------|
+| `brainstorming` | Before any design decision |
+| `writing-plans` | After spec approved |
+| `test-driven-development` | During implementation |
+| `systematic-debugging` | Any bug or test failure |
+| `verification-before-completion` | Before claiming done |

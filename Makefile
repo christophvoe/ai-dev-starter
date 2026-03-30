@@ -1,4 +1,7 @@
-.PHONY: help install sync lock lint format typecheck test test-cov check clean pre-commit scrape scrape-list scrape-tag scrape-article scrape-bookmarks summarize
+.PHONY: help install sync lock lint format typecheck test test-cov check clean pre-commit scrape scrape-list scrape-tag scrape-article scrape-bookmarks summarize notify bot review orchestrate-start orchestrate-next orchestrate-block orchestrate-resume orchestrate-status orchestrate-done orchestrate-check-failed orchestrate-explain onboard template-clean discover discover-scrape
+
+# PYTHONPATH so `uv run python -m agents.*` and `uv run python -m bot.*` resolve
+export PYTHONPATH := src
 
 # Default target
 help: ## Show this help
@@ -76,6 +79,63 @@ scrape-bookmarks: ## Scrape your private bookmarks
 
 summarize: ## Show digest of recent articles in knowledge base
 	uv run python -m knowledge.medium_scraper --summarize --max 10 $(OUTPUT_FLAG)
+
+discover: ## Discover trending articles from Medium tags (report only)
+	uv run python -m knowledge.medium_scraper --discover --max 15 $(if $(TAGS),--discover-tags "$(TAGS)",) $(if $(KEYWORDS),--keywords "$(KEYWORDS)",) $(if $(CURATE),--curate,)
+
+discover-scrape: ## Discover trending articles and auto-scrape top 10
+	uv run python -m knowledge.medium_scraper --discover --max 15 --scrape-top 10 --enrich $(OUTPUT_FLAG) $(DATED_FLAG) $(if $(TAGS),--discover-tags "$(TAGS)",) $(if $(KEYWORDS),--keywords "$(KEYWORDS)",) $(if $(CURATE),--curate,)
+
+# ── Telegram Notifications ────────────────────────────────────────────────────
+
+notify: ## Send a Telegram notification (usage: make notify MSG="your message")
+	uv run python -m bot.notify "$(MSG)"
+
+bot: ## Start the interactive Telegram bot
+	uv run python -m bot.telegram_bot
+
+# ── Code Review ───────────────────────────────────────────────────────────────
+
+review: ## AI code review (usage: make review [BRANCH=feat/x] [NOTIFY=1])
+	uv run python -m agents.reviewer $(if $(BRANCH),--branch "$(BRANCH)",) $(if $(NOTIFY),--notify,)
+
+# ── Orchestration ──────────────────────────────────────────────────────────────
+
+orchestrate-start: ## Start orchestration session (TASK="..." [AGENT=copilot] [WORKTREE=1])
+	uv run python -m agents.orchestrator start "$(TASK)" $(if $(AGENT),--agent "$(AGENT)",) $(if $(WORKTREE),--worktree,)
+
+orchestrate-next: ## Advance to next phase [FAILED=1 if review failed]
+	uv run python -m agents.orchestrator next $(if $(FAILED),--failed,)
+
+orchestrate-block: ## Block session with reason (REASON="...")
+	uv run python -m agents.orchestrator block "$(REASON)"
+
+orchestrate-resume: ## Resume blocked/paused session
+	uv run python -m agents.orchestrator resume
+
+orchestrate-status: ## Show current orchestration state
+	uv run python -m agents.orchestrator status
+
+orchestrate-done: ## Mark session complete
+	uv run python -m agents.orchestrator done
+
+orchestrate-check-failed: ## Increment failed check counter (call after make check fails)
+	uv run python -m agents.orchestrator check-failed
+
+orchestrate-explain: ## Send Explanation from handoff.md to Telegram
+	uv run python -m agents.orchestrator explain
+
+onboard: ## Interactive new-project onboarding agent
+	uv run python -m agents.onboarding
+
+template-clean: ## Reset repo to clean template state (strips example data)
+	@echo "Cleaning example data..."
+	find data/knowledge/raw/medium -name "*.md" -delete 2>/dev/null || true
+	find data/knowledge/meta -name "*.json" -delete 2>/dev/null || true
+	@echo '{"task":"","phase":"PLANNING","agent":"claude","iterations":0,"failed_checks":0,"uncertainty":false,"status":"ACTIVE","started_at":"","worktree":null,"history":[]}' > docs/orchestration/session.json
+	@printf '## Task\n\n\n## Changed Files\n\n\n## Output\n\n(test results, key observations)\n\n## Explanation\n\n(plain English: what was changed, why, and how)\n\n## Uncertainty\n\nNone\n' > docs/orchestration/handoff.md
+	@echo "" > docs/orchestration/human_input.md
+	@echo "Template clean. Edit .env and run: make orchestrate-start TASK='your first task'"
 
 # ── Cleanup ───────────────────────────────────────────────────────────────────
 
