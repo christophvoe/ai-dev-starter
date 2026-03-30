@@ -22,12 +22,21 @@
 ```
 
 ### GitHub Copilot agent commands (Copilot Chat)
+
+Full workflow order (use what you need, skip what you don't):
 ```
-@orchestrator implement: add --verbose flag to CLI
-@tdd         write tests for the notify module
-@planner     plan: refactor MediumScraper
-@debugger    fix: TypeError in article_curator.py line 45
-@code-reviewer review src/knowledge/medium_scraper.py
+@brainstorm  "should we use RSS or scrape HTML for dev.to?"   ← explore options first
+@planner     plan: add dev.to scraper                         ← concrete plan, no code
+@tdd         implement: add dev.to scraper                    ← TDD implementation
+@orchestrator implement: add --verbose flag to CLI            ← full plan+implement+test+review
+@debugger    fix: TypeError in article_curator.py line 45     ← root cause first
+@code-reviewer review src/knowledge/medium_scraper.py         ← structured review
+@setup       (interactive onboarding for new projects)
+```
+
+Typical flow for a real feature:
+```
+@brainstorm → @planner → make orchestrate-start → @tdd → @code-reviewer
 ```
 
 ### Useful prompts for chat (no command needed)
@@ -107,9 +116,26 @@ make format       # auto-fix formatting
 
 ## Context tips for better AI answers
 
-Add to any Claude Code or Copilot prompt:
+### context7 — live library docs (works in BOTH tools)
 
-- `use context7` → pulls live library docs (e.g., "how do I use feedparser? use context7")
-- Paste the exact error message, not a summary
+`context7` is an MCP server configured in `.vscode/mcp.json`. Both Claude Code and Copilot
+share the same MCP config, so `use context7` works in both.
+
+Add to any prompt — Claude Code or Copilot Chat:
+
+```text
+"How do I paginate feedparser results? use context7"
+"Show me the python-telegram-bot CommandHandler API. use context7"
+"What changed in anthropic SDK 0.49? use context7"
+```
+
+It fetches current docs at query time — not training data. Use it whenever you're
+working with a specific library version or something that changes frequently.
+
+### Other tips
+
+- Paste the exact error message, not a summary ("TypeError: …" not "it crashed")
 - Reference the file: "in src/knowledge/medium_scraper.py, the TrendDiscoverer class…"
 - State what you've already tried
+- For Claude Code: `sequential-thinking` MCP is active for complex multi-step reasoning
+  (automatic, no keyword needed)
