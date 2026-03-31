@@ -335,7 +335,98 @@ def print_next_steps(answers: dict[str, str]) -> None:
     print("=" * 60)
 
 
+def promote_to_repo(target: Path) -> None:
+    """Copy AI tooling files from this repo into an existing target repo.
+
+    Promotes:
+      - .github/agents/*.agent.md       → TARGET/.github/agents/
+      - .github/prompts/*.prompt.md     → TARGET/.github/prompts/
+      - .github/instructions/           → TARGET/.github/instructions/
+      - .github/copilot-instructions.md → TARGET/.github/copilot-instructions.md
+                                          (creates if missing; skips if exists)
+      - Appends ai-dev-starter section to TARGET/CLAUDE.md (if exists)
+
+    Does NOT overwrite files that already exist in the target repo.
+    """
+    import shutil
+
+    if not target.exists():
+        print(f"  Error: target path does not exist: {target}")
+        sys.exit(1)
+
+    src_github = BASE_DIR / ".github"
+    dst_github = target / ".github"
+
+    # Directories to mirror wholesale (create if missing, copy files, skip existing)
+    for subdir in ("agents", "prompts", "instructions"):
+        src_dir = src_github / subdir
+        dst_dir = dst_github / subdir
+        if not src_dir.exists():
+            continue
+        dst_dir.mkdir(parents=True, exist_ok=True)
+        for src_file in src_dir.glob("*"):
+            dst_file = dst_dir / src_file.name
+            if dst_file.exists():
+                print(f"  Skipped (exists): .github/{subdir}/{src_file.name}")
+            else:
+                shutil.copy2(src_file, dst_file)
+                print(f"  Copied: .github/{subdir}/{src_file.name}")
+
+    # copilot-instructions.md — copy only if target doesn't have one
+    src_ci = src_github / "copilot-instructions.md"
+    dst_ci = dst_github / "copilot-instructions.md"
+    if src_ci.exists():
+        if dst_ci.exists():
+            print("  Skipped (exists): .github/copilot-instructions.md")
+            print("    → Manually merge AI Dev Starter sections if needed")
+        else:
+            dst_github.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_ci, dst_ci)
+            print("  Copied: .github/copilot-instructions.md")
+
+    # CLAUDE.md — append a pointer section if CLAUDE.md exists in target
+    dst_claude = target / "CLAUDE.md"
+    if dst_claude.exists():
+        existing = dst_claude.read_text(encoding="utf-8")
+        marker = "## AI Dev Starter tooling"
+        if marker not in existing:
+            section = (
+                "\n---\n\n"
+                "## AI Dev Starter tooling\n\n"
+                "This repo uses AI Dev Starter for Medium scraping, Telegram notifications,\n"
+                "and multi-agent orchestration. Tooling lives in the `ai-dev-starter/` folder\n"
+                "(gitignored). Run commands from there:\n\n"
+                "```bash\n"
+                "cd ai-dev-starter\n"
+                "make scrape-tag TAG='python'          # scrape articles\n"
+                "make orchestrate-start TASK='...'     # start a task\n"
+                "make bot                              # Telegram bot\n"
+                "```\n"
+            )
+            dst_claude.write_text(existing + section, encoding="utf-8")
+            print("  Updated: CLAUDE.md (appended ai-dev-starter section)")
+    else:
+        print("  Note: no CLAUDE.md found in target repo — skipping")
+
+    print(f"\nPromotion complete → {target}")
+    print("Review the copied files and adjust descriptions for your project.")
+
+
 def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="AI Dev Starter onboarding")
+    parser.add_argument(
+        "--promote-to",
+        metavar="PATH",
+        help="Promote AI tooling files into an existing repo at PATH",
+    )
+    args = parser.parse_args()
+
+    if args.promote_to:
+        promote_to_repo(Path(args.promote_to).resolve())
+        return
+
     try:
         answers = collect_answers()
         print("\nWriting configuration files...")

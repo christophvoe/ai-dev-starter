@@ -11,6 +11,7 @@ from agents.onboarding import (
     append_to_claude_md,
     collect_answers,
     print_next_steps,
+    promote_to_repo,
     update_copilot_instructions,
     update_env_example,
     write_project_doc,
@@ -310,6 +311,123 @@ def test_print_next_steps_no_tool_plain_template(capsys: pytest.CaptureFixture) 
     out = capsys.readouterr().out
     assert "make check" in out
     assert "orchestrate-start" not in out
+
+
+# ── promote_to_repo ────────────────────────────────────────────────────────────
+
+
+def test_promote_copies_agents_dir(tmp_path: Path) -> None:
+    """Agent files should be copied into target/.github/agents/."""
+    target = tmp_path / "target_repo"
+    target.mkdir()
+
+    src_agents = tmp_path / "fake_src" / ".github" / "agents"
+    src_agents.mkdir(parents=True)
+    (src_agents / "orchestrator.agent.md").write_text("# Orchestrator\n", encoding="utf-8")
+
+    from unittest.mock import patch
+
+    import agents.onboarding as onboarding_mod
+
+    with patch.object(onboarding_mod, "BASE_DIR", tmp_path / "fake_src"):
+        promote_to_repo(target)
+
+    copied = target / ".github" / "agents" / "orchestrator.agent.md"
+    assert copied.exists()
+    assert copied.read_text(encoding="utf-8") == "# Orchestrator\n"
+
+
+def test_promote_skips_existing_files(tmp_path: Path) -> None:
+    """Existing files in target should NOT be overwritten."""
+    target = tmp_path / "target_repo"
+    (target / ".github" / "agents").mkdir(parents=True)
+    existing = target / ".github" / "agents" / "orchestrator.agent.md"
+    existing.write_text("original content\n", encoding="utf-8")
+
+    src_agents = tmp_path / "fake_src" / ".github" / "agents"
+    src_agents.mkdir(parents=True)
+    (src_agents / "orchestrator.agent.md").write_text("new content\n", encoding="utf-8")
+
+    from unittest.mock import patch
+
+    import agents.onboarding as onboarding_mod
+
+    with patch.object(onboarding_mod, "BASE_DIR", tmp_path / "fake_src"):
+        promote_to_repo(target)
+
+    assert existing.read_text(encoding="utf-8") == "original content\n"
+
+
+def test_promote_appends_to_claude_md(tmp_path: Path) -> None:
+    """Should append the ai-dev-starter section to target CLAUDE.md."""
+    target = tmp_path / "target_repo"
+    target.mkdir()
+    claude_md = target / "CLAUDE.md"
+    claude_md.write_text("# My Project\n\nSome content.\n", encoding="utf-8")
+
+    from unittest.mock import patch
+
+    import agents.onboarding as onboarding_mod
+
+    fake_src = tmp_path / "fake_src"
+    fake_src.mkdir()
+
+    with patch.object(onboarding_mod, "BASE_DIR", fake_src):
+        promote_to_repo(target)
+
+    content = claude_md.read_text(encoding="utf-8")
+    assert "## AI Dev Starter tooling" in content
+    assert "make scrape-tag" in content
+
+
+def test_promote_does_not_duplicate_claude_md_section(tmp_path: Path) -> None:
+    """Running promote twice should not double-append the section."""
+    target = tmp_path / "target_repo"
+    target.mkdir()
+    claude_md = target / "CLAUDE.md"
+    claude_md.write_text("# My Project\n", encoding="utf-8")
+
+    from unittest.mock import patch
+
+    import agents.onboarding as onboarding_mod
+
+    fake_src = tmp_path / "fake_src"
+    fake_src.mkdir()
+
+    with patch.object(onboarding_mod, "BASE_DIR", fake_src):
+        promote_to_repo(target)
+        promote_to_repo(target)
+
+    content = claude_md.read_text(encoding="utf-8")
+    assert content.count("## AI Dev Starter tooling") == 1
+
+
+def test_promote_exits_if_target_missing(tmp_path: Path) -> None:
+    """Should exit with error if target path doesn't exist."""
+    missing = tmp_path / "nonexistent"
+    with pytest.raises(SystemExit):
+        promote_to_repo(missing)
+
+
+def test_promote_skips_copilot_instructions_if_exists(tmp_path: Path) -> None:
+    """copilot-instructions.md should NOT be overwritten if already present in target."""
+    target = tmp_path / "target_repo"
+    (target / ".github").mkdir(parents=True)
+    ci = target / ".github" / "copilot-instructions.md"
+    ci.write_text("# My own instructions\n", encoding="utf-8")
+
+    src_github = tmp_path / "fake_src" / ".github"
+    src_github.mkdir(parents=True)
+    (src_github / "copilot-instructions.md").write_text("# AI Dev Starter\n", encoding="utf-8")
+
+    from unittest.mock import patch
+
+    import agents.onboarding as onboarding_mod
+
+    with patch.object(onboarding_mod, "BASE_DIR", tmp_path / "fake_src"):
+        promote_to_repo(target)
+
+    assert ci.read_text(encoding="utf-8") == "# My own instructions\n"
 
 
 def test_update_env_example_adds_missing_vars(tmp_path: Path) -> None:

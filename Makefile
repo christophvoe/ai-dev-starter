@@ -1,4 +1,4 @@
-.PHONY: help install sync lock lint format typecheck test test-cov check clean pre-commit scrape scrape-list scrape-tag scrape-article scrape-bookmarks summarize notify bot review orchestrate-start orchestrate-next orchestrate-block orchestrate-resume orchestrate-status orchestrate-done orchestrate-check-failed orchestrate-explain onboard template-clean discover discover-scrape
+.PHONY: help install sync lock lint format typecheck test test-cov check clean pre-commit scrape scrape-list scrape-tag scrape-article scrape-bookmarks summarize notify bot review orchestrate-start orchestrate-next orchestrate-block orchestrate-resume orchestrate-status orchestrate-done orchestrate-check-failed orchestrate-explain onboard template-clean discover discover-scrape promote
 
 # PYTHONPATH so `uv run python -m agents.*` and `uv run python -m bot.*` resolve
 export PYTHONPATH := src
@@ -127,6 +127,9 @@ orchestrate-explain: ## Send Explanation from handoff.md to Telegram
 
 onboard: ## Interactive new-project onboarding agent
 	uv run python -m agents.onboarding
+
+promote: ## Promote AI tooling into an existing repo (TARGET="../my-repo")
+	uv run python -m agents.onboarding --promote-to "$(TARGET)"
 
 template-clean: ## Reset repo to clean template state (strips example data)
 	@echo "Cleaning example data..."
