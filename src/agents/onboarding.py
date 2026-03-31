@@ -412,6 +412,54 @@ def promote_to_repo(target: Path) -> None:
     print("Review the copied files and adjust descriptions for your project.")
 
 
+def make_workspace(target: Path) -> None:
+    """Generate a .code-workspace file in target repo for multi-root VS Code / Copilot indexing.
+
+    Creates TARGET/<repo-name>.code-workspace that adds both the target repo and the
+    ai-dev-starter subfolder as roots. This makes @workspace in Copilot Chat and
+    Claude Code index BOTH codebases — so AI assistants can see the orchestrator,
+    scraper, and other ai-dev-starter code while you work in your own repo.
+    """
+    import json
+
+    if not target.exists():
+        print(f"  Error: target path does not exist: {target}")
+        sys.exit(1)
+
+    # Derive relative path from target to ai-dev-starter
+    try:
+        rel_path = BASE_DIR.relative_to(target)
+        rel_str = str(rel_path).replace("\\", "/")
+    except ValueError:
+        rel_str = str(BASE_DIR).replace("\\", "/")
+
+    repo_name = target.resolve().name or "project"
+    workspace_file = target / f"{repo_name}.code-workspace"
+
+    workspace = {
+        "folders": [
+            {"path": ".", "name": repo_name},
+            {"path": rel_str, "name": "AI Dev Starter (tooling)"},
+        ],
+        "settings": {
+            "search.exclude": {
+                f"{rel_str}/.venv/**": True,
+                f"{rel_str}/data/**": True,
+                f"{rel_str}/__pycache__/**": True,
+                f"{rel_str}/.mypy_cache/**": True,
+                f"{rel_str}/.ruff_cache/**": True,
+            }
+        },
+    }
+
+    workspace_file.write_text(json.dumps(workspace, indent=2) + "\n", encoding="utf-8")
+    print(f"  Created: {workspace_file.name}")
+    print("\nOpen this file in VS Code to enable multi-root indexing:")
+    print(f'  code "{workspace_file}"')
+    print("\nNow @workspace in Copilot Chat will see both your code AND ai-dev-starter.")
+    print("Add the .code-workspace file to your .gitignore if you don't want to commit it.")
+
+
 def main() -> None:
     import argparse
 
@@ -421,10 +469,19 @@ def main() -> None:
         metavar="PATH",
         help="Promote AI tooling files into an existing repo at PATH",
     )
+    parser.add_argument(
+        "--make-workspace",
+        metavar="PATH",
+        help="Generate a .code-workspace file in PATH for multi-root Copilot indexing",
+    )
     args = parser.parse_args()
 
     if args.promote_to:
         promote_to_repo(Path(args.promote_to).resolve())
+        return
+
+    if args.make_workspace:
+        make_workspace(Path(args.make_workspace).resolve())
         return
 
     try:

@@ -10,6 +10,7 @@ from agents.onboarding import (
     _parse_name,
     append_to_claude_md,
     collect_answers,
+    make_workspace,
     print_next_steps,
     promote_to_repo,
     update_copilot_instructions,
@@ -428,6 +429,59 @@ def test_promote_skips_copilot_instructions_if_exists(tmp_path: Path) -> None:
         promote_to_repo(target)
 
     assert ci.read_text(encoding="utf-8") == "# My own instructions\n"
+
+
+# ── make_workspace ─────────────────────────────────────────────────────────────
+
+
+def test_make_workspace_creates_file(tmp_path: Path) -> None:
+    """Should create a .code-workspace file in the target directory."""
+    target = tmp_path / "target_repo"
+    target.mkdir()
+
+    from unittest.mock import patch
+
+    import agents.onboarding as onboarding_mod
+
+    fake_src = tmp_path / "target_repo" / "ai-dev-starter"
+    fake_src.mkdir()
+
+    with patch.object(onboarding_mod, "BASE_DIR", fake_src):
+        make_workspace(target)
+
+    workspace_files = list(target.glob("*.code-workspace"))
+    assert len(workspace_files) == 1
+
+
+def test_make_workspace_contains_two_folders(tmp_path: Path) -> None:
+    """Generated workspace must have two folder entries."""
+    import json
+
+    target = tmp_path / "target_repo"
+    target.mkdir()
+
+    from unittest.mock import patch
+
+    import agents.onboarding as onboarding_mod
+
+    fake_src = tmp_path / "target_repo" / "ai-dev-starter"
+    fake_src.mkdir()
+
+    with patch.object(onboarding_mod, "BASE_DIR", fake_src):
+        make_workspace(target)
+
+    workspace_file = next(target.glob("*.code-workspace"))
+    data = json.loads(workspace_file.read_text(encoding="utf-8"))
+    assert len(data["folders"]) == 2
+    paths = [f["path"] for f in data["folders"]]
+    assert "." in paths  # host repo root
+
+
+def test_make_workspace_exits_if_target_missing(tmp_path: Path) -> None:
+    """Should exit with error if target path doesn't exist."""
+    missing = tmp_path / "nonexistent"
+    with pytest.raises(SystemExit):
+        make_workspace(missing)
 
 
 def test_update_env_example_adds_missing_vars(tmp_path: Path) -> None:
