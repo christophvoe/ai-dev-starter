@@ -2,17 +2,66 @@
 
 ## When to use what
 
-| Task complexity | Tool |
-|----------------|------|
-| Question / explanation / typo fix | Chat directly in Claude or Copilot |
+| Task | Tool |
+|------|------|
+| Quick question / explanation / typo fix | Chat directly in Claude or Copilot |
 | One small change (1–2 files) | `/implement` (Claude) or `@tdd` (Copilot) |
 | Real feature / refactor / new module | `make orchestrate-start TASK="..."` |
+| Debug a specific error | `@debugger` (Copilot) or `/check` (Claude) |
+| Plan before coding | `@brainstorm` → `@planner` (Copilot) or `/plan` (Claude) |
+| Code review | `make review` or `@code-reviewer` |
 
 ---
 
-## Quick commands (no orchestration needed)
+## GitHub Copilot Chat agents
 
-### Claude Code slash commands
+### Primary flow — @orchestrator does everything
+
+```
+@orchestrator implement: add --verbose flag to CLI
+```
+
+This runs: brainstorm (if needed) → plan → implement → test → review in one pass.
+**Use this for 90% of tasks.** The other agents below are escape hatches.
+
+### Specialist agents (use only when you hit the specific situation)
+
+| Agent | When to use | Example |
+|-------|-------------|---------|
+| `@brainstorm` | Approach is genuinely unclear — explore options first | `@brainstorm should we use RSS or scrape HTML for dev.to?` |
+| `@planner` | You know what to build, want to approve plan before code | `@planner plan: add dev.to scraper` |
+| `@tdd` | TDD only, no full orchestration | `@tdd implement: add dev.to scraper` |
+| `@debugger` | Bug with unclear root cause | `@debugger fix: TypeError in article_curator.py line 45` |
+| `@code-reviewer` | Standalone review of a file or feature | `@code-reviewer review src/knowledge/medium_scraper.py` |
+| `@setup` | Interactive onboarding for a new project | `@setup` |
+
+### Copilot Chat tips
+
+```
+@workspace how does TrendDiscoverer score articles?
+@workspace what does session.json look like after REVIEWING fails?
+@workspace show all functions in src/agents/orchestrator.py
+@workspace explain the orchestration phase flow
+```
+
+`@workspace` searches your entire codebase. If you have `ai-dev-starter/` as an embedded
+subfolder, open the `.code-workspace` file (see `make workspace`) so Copilot indexes both repos.
+
+**Add `use context7` to any prompt for live library docs:**
+
+```
+How do I paginate feedparser results? use context7
+Show me the python-telegram-bot CommandHandler API. use context7
+What changed in anthropic SDK 0.49? use context7
+```
+
+context7 fetches current docs at query time — not training data. Use whenever you're
+working with a specific library version.
+
+---
+
+## Claude Code slash commands
+
 ```
 /implement add a --verbose flag to the CLI
 /plan      refactor MediumScraper into smaller classes
@@ -21,43 +70,39 @@
 /check     (runs ruff + mypy + pytest)
 ```
 
-### GitHub Copilot agent commands (Copilot Chat)
+Claude Code also has **superpowers** workflows that activate automatically:
 
-**Normal flow — @orchestrator does it all:**
-```
-@orchestrator implement: add --verbose flag to CLI   ← plan + implement + test + review in one pass
-```
+| Workflow | What triggers it | What it does |
+|----------|-----------------|--------------|
+| `brainstorming` | Before planning | Explores 2–3 approaches, picks one |
+| `writing-plans` | Before implementing | Detailed task-by-task plan with TDD |
+| `test-driven-development` | While implementing | Red→Green→Refactor enforced |
+| `systematic-debugging` | On a bug | Root cause first, no guessing |
+| `verification-before-completion` | Before claiming done | Runs commands, reads output |
 
-**Specialist agents — use only when you hit the specific situation:**
+---
 
-```text
-@brainstorm   "should we use RSS or scrape HTML for dev.to?"  ← approach is genuinely unclear
-@planner      plan: add dev.to scraper                        ← want human to approve plan first
-@tdd          implement: add dev.to scraper                   ← TDD only, no full orchestration
-@debugger     fix: TypeError in article_curator.py line 45    ← bug, root cause first
-@code-reviewer review src/knowledge/medium_scraper.py         ← standalone review
-@setup        (interactive onboarding for a new project)
-```
+## Quality gate
 
-### Useful prompts for chat (no command needed)
-```
-"Explain how TrendDiscoverer scores articles"
-"What does session.json look like after REVIEWING fails?"
-"Show me all functions in src/agents/orchestrator.py"
-"Why is my test failing? [paste error]"
-"Rewrite this function to be under 50 lines: [paste]"
+```bash
+make check        # ruff + mypy + pytest (run before every handoff)
+make lint         # ruff only
+make typecheck    # mypy only
+make test         # pytest only
+make format       # auto-fix formatting
 ```
 
 ---
 
-## Knowledge base
+## Knowledge base (scraping)
 
 ```bash
 make scrape-tag TAG="ai-agents"              # scrape by topic
+make scrape-tag TAG="python" OUTPUT="../docs/research"  # save into your repo
 make scrape-list URL="https://medium.com/…"  # scrape your saved list
 make discover TAGS="llm,python"              # find trending articles
-make discover TAGS="llm" CURATE=1           # LLM picks the best ones
-make discover-scrape TAGS="llm" CURATE=1    # discover + auto-scrape top 10
+make discover TAGS="llm" CURATE=1            # LLM picks the best ones
+make discover-scrape TAGS="llm" CURATE=1     # discover + auto-scrape top 10
 make summarize                               # show digest of saved articles
 ```
 
@@ -78,7 +123,7 @@ make orchestrate-check-failed         # call after make check fails
 ```
 
 **Phase flow**: `PLANNING → IMPLEMENTING → REVIEWING → DONE`
-**Fail flow**: `REVIEWING → FIXING → REVIEWING` (other agent reviews)
+**Fail flow**: `REVIEWING → FIXING → REVIEWING` (opposite agent reviews)
 **Auto-block**: 3 fix cycles, 2 failed quality gates, or uncertainty flag
 
 ---
@@ -92,50 +137,71 @@ make orchestrate-check-failed         # call after make check fails
 /resume    resume blocked/paused
 /skip      skip current phase
 /scrape    trigger Medium scrape
-/discover [tags]  find trending articles
-/review [branch]  AI code review
+/discover [tags]    find trending articles
+/review [branch]    AI code review
 /check     run quality gate
-/ask <question>   search knowledge base
+/ask <question>     search knowledge base
 ```
 
 Any other text you send → saved to `human_input.md` for the next agent to pick up.
 
 ---
 
-## Quality gate
+## Embedding in an existing repo
+
+Use `ai-dev-starter` as a gitignored subfolder in any project — full scraping,
+Telegram, and orchestration without cluttering your commits.
 
 ```bash
-make check        # ruff + mypy + pytest (run before every handoff)
-make lint         # ruff only
-make typecheck    # mypy only
-make test         # pytest only
-make format       # auto-fix formatting
+cd my-existing-repo
+git clone https://github.com/christophvoe/ai-dev-starter
+echo "ai-dev-starter/" >> .gitignore
+
+cd ai-dev-starter
+make install
+make promote TARGET="../"    # copy agents + copilot-instructions into your repo
+make workspace TARGET="../"  # generate multi-root .code-workspace for Copilot indexing
+
+# Open the workspace file so @workspace sees both repos:
+code "../my-existing-repo.code-workspace"
+```
+
+See [docs/EMBED-IN-EXISTING-REPO.md](EMBED-IN-EXISTING-REPO.md) for the full guide.
+
+---
+
+## Onboarding a new project
+
+```bash
+make onboard          # interactive setup (renames files, writes PROJECT.md, etc.)
+make template-clean   # reset repo to clean template state
 ```
 
 ---
 
-## Context tips for better AI answers
+## LLM connections
 
-### context7 — live library docs (works in BOTH tools)
+Scraping and Telegram work with **zero API keys**. For curation + AI review:
 
-`context7` is an MCP server configured in `.vscode/mcp.json`. Both Claude Code and Copilot
-share the same MCP config, so `use context7` works in both.
+| Provider | Cost | Command |
+|----------|------|---------|
+| Anthropic (Claude) | ~$0.01/run | `ANTHROPIC_API_KEY=sk-ant-...` |
+| OpenAI (GPT) | ~$0.01/run | `OPENAI_API_KEY=sk-...` |
+| Ollama (local) | Free | `ollama pull llama3.2` |
+| OpenRouter | Free tier | `OPENROUTER_API_KEY=sk-or-...` |
+| GitHub Models | Free (Copilot) | `GITHUB_TOKEN=ghp_...` |
 
-Add to any prompt — Claude Code or Copilot Chat:
+See [docs/LLM-CONNECTIONS.md](LLM-CONNECTIONS.md) for setup instructions.
 
-```text
-"How do I paginate feedparser results? use context7"
-"Show me the python-telegram-bot CommandHandler API. use context7"
-"What changed in anthropic SDK 0.49? use context7"
-```
+---
 
-It fetches current docs at query time — not training data. Use it whenever you're
-working with a specific library version or something that changes frequently.
+## Always-on Telegram bot (Railway)
 
-### Other tips
+Deploy to Railway for a bot that keeps running when the laptop is closed:
 
-- Paste the exact error message, not a summary ("TypeError: …" not "it crashed")
-- Reference the file: "in src/knowledge/medium_scraper.py, the TrendDiscoverer class…"
-- State what you've already tried
-- For Claude Code: `sequential-thinking` MCP is active for complex multi-step reasoning
-  (automatic, no keyword needed)
+1. Push to GitHub
+2. Create project at railway.app → Deploy from GitHub repo
+3. Set env vars: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_USER_ID`
+4. Set start command: `uv run python -m bot.telegram_bot`
+
+Free tier covers a personal bot easily.
