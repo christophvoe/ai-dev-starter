@@ -23,10 +23,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-DOCS_DIR = Path(__file__).resolve().parent.parent.parent / "docs" / "orchestration"
+PROJECT_DIR = Path(__file__).resolve().parent.parent.parent
+DOCS_DIR = PROJECT_DIR / "docs" / "orchestration"
+KNOWLEDGE_DIR = PROJECT_DIR / "data" / "knowledge" / "raw" / "medium"
 SESSION_FILE = DOCS_DIR / "session.json"
 HANDOFF_FILE = DOCS_DIR / "handoff.md"
 HUMAN_INPUT_FILE = DOCS_DIR / "human_input.md"
+
+KNOWLEDGE_LOOKBACK_DAYS = 7
+KNOWLEDGE_MAX_FILES = 8
 
 MAX_ITERATIONS = 3
 MAX_FAILED_CHECKS = 2
@@ -130,6 +135,39 @@ def advance_phase(session: dict[str, Any], review_passed: bool = True) -> dict[s
     return session
 
 
+def _recent_knowledge_files(knowledge_dir: Path = KNOWLEDGE_DIR) -> list[Path]:
+    """Return recently modified scraped article files, newest first."""
+    import time
+
+    if not knowledge_dir.exists():
+        return []
+    cutoff = time.time() - KNOWLEDGE_LOOKBACK_DAYS * 86400
+    files = [f for f in knowledge_dir.rglob("*.md") if f.stat().st_mtime >= cutoff]
+    files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+    return files[:KNOWLEDGE_MAX_FILES]
+
+
+def _knowledge_section(knowledge_dir: Path = KNOWLEDGE_DIR) -> str:
+    """Build the ## Knowledge section for handoff.md listing recent articles."""
+    files = _recent_knowledge_files(knowledge_dir)
+    if not files:
+        return ""
+    lines = [
+        "\n## Knowledge\n",
+        f"Recently scraped articles (last {KNOWLEDGE_LOOKBACK_DAYS} days) — read these before planning:\n",
+    ]
+    for f in files:
+        try:
+            rel = f.relative_to(PROJECT_DIR)
+        except ValueError:
+            rel = f
+        lines.append(f"- {rel}")
+    lines.append(
+        "\nTip: ask your AI assistant to read these files for context before writing the plan.\n"
+    )
+    return "\n".join(lines)
+
+
 def cmd_start(
     task: str,
     agent: str = "claude",
@@ -163,11 +201,15 @@ def cmd_start(
 
     handoff = path.parent / "handoff.md"
     human_input = path.parent / "human_input.md"
-    if not handoff.exists():
-        handoff.write_text(
-            "## Task\n\n## Changed Files\n\n## Output\n\n## Uncertainty\nNone\n",
-            encoding="utf-8",
-        )
+    knowledge = _knowledge_section()
+    handoff.write_text(
+        f"## Task\n\n{task}\n\n"
+        "## Changed Files\n\n\n"
+        "## Output\n\n(test results, key observations)\n\n"
+        "## Explanation\n\n(plain English: what was changed, why, and how)\n\n"
+        "## Uncertainty\n\nNone" + knowledge,
+        encoding="utf-8",
+    )
     if not human_input.exists():
         human_input.write_text("", encoding="utf-8")
 

@@ -25,7 +25,32 @@ docs/orchestration/           — Session state (session.json, handoff.md, human
 
 ---
 
-## 2. Orchestration Protocol
+## 2. Knowledge Base — Read Before Planning
+
+**Before writing any plan or spec, check for relevant scraped articles.**
+
+When `make orchestrate-start` is called, `docs/orchestration/handoff.md` is
+automatically populated with a `## Knowledge` section listing recently scraped
+articles. Read those files before planning — they contain real-world context,
+patterns, and solutions relevant to the task.
+
+To read them manually:
+```
+@workspace read files listed under ## Knowledge in docs/orchestration/handoff.md
+```
+
+To scrape fresh articles on a topic before starting a task:
+```bash
+cd ai-dev-starter   # or from repo root if embedded
+make scrape-tag TAG="your topic"   # then re-run orchestrate-start
+```
+
+The knowledge base is in `data/knowledge/raw/medium/` — ask `@workspace` about
+it directly: `@workspace summarize insights from data/knowledge/raw/medium/`
+
+---
+
+## 3. Orchestration Protocol
 
 **ALWAYS check session state before starting any work.**
 
@@ -58,7 +83,7 @@ make orchestrate-check-failed               # make check failed, increment count
 
 ---
 
-## 3. Agent Assignment Rule
+## 4. Agent Assignment Rule
 
 **Same agent: plans + implements + first review.**
 Only after FIXING does the other agent review (fresh eyes).
@@ -71,7 +96,7 @@ You plan → You implement → You review (first)
 
 ---
 
-## 4. Code Style
+## 5. Code Style
 
 - **Formatter/Linter**: ruff (line-length 100)
 - **Type checker**: mypy (strict on src/)
@@ -84,7 +109,7 @@ You plan → You implement → You review (first)
 
 ---
 
-## 5. Quality Gate
+## 6. Quality Gate
 
 Run before EVERY handoff or commit:
 ```bash
@@ -95,7 +120,7 @@ If it fails twice: run `make orchestrate-check-failed` instead of pushing broken
 
 ---
 
-## 6. Testing
+## 7. Testing
 
 - pytest in `tests/test_*.py`
 - Mock ALL external calls: `@patch("module.requests.get")`
@@ -104,7 +129,7 @@ If it fails twice: run `make orchestrate-check-failed` instead of pushing broken
 
 ---
 
-## 7. Commit Format
+## 8. Commit Format
 
 ```
 type(scope): description
@@ -115,7 +140,7 @@ Example: feat(orchestrator): add loop prevention triggers
 
 ---
 
-## 8. Skills Reference
+## 9. Skills Reference
 
 ### This tool (Copilot agents)
 

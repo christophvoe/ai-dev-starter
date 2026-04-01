@@ -384,6 +384,18 @@ def promote_to_repo(target: Path) -> None:
             shutil.copy2(src_ci, dst_ci)
             print("  Copied: .github/copilot-instructions.md")
 
+    # .vscode/mcp.json — copy MCP config so context7 + sequential-thinking work in target
+    src_mcp = BASE_DIR / ".vscode" / "mcp.json"
+    dst_vscode = target / ".vscode"
+    dst_mcp = dst_vscode / "mcp.json"
+    if src_mcp.exists():
+        if dst_mcp.exists():
+            print("  Skipped (exists): .vscode/mcp.json")
+        else:
+            dst_vscode.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_mcp, dst_mcp)
+            print("  Copied: .vscode/mcp.json (context7 + sequential-thinking MCPs)")
+
     # CLAUDE.md — append a pointer section if CLAUDE.md exists in target
     dst_claude = target / "CLAUDE.md"
     if dst_claude.exists():

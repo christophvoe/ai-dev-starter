@@ -1,269 +1,290 @@
-# Getting Started: AI Tools & Workflow Guide
+# Getting Started — AI Dev Starter
 
-> The practical guide to using GitHub Copilot + Claude Code effectively.
-> Both tools share the same quality gates and project conventions.
+Choose your path:
+
+- **[Path A — Fresh repo](#path-a--fresh-repo)**: starting a new project from this template
+- **[Path B — Embed in existing repo](#path-b--embed-in-existing-repo)**: drop tooling into a repo you already have
+
+Both paths converge at the same daily workflow after setup.
 
 ---
 
-## 1. Setup Checklist
+## Path A — Fresh repo
+
+### 1. Prerequisites
 
 ```bash
 python --version       # 3.12+
-uv --version           # 0.11+
-make --version         # GNU Make
-make install           # venv + deps + pre-commit hooks
-make check             # verify everything works (lint + typecheck + test)
+uv --version           # 0.11+ (install: curl -Ls https://astral.sh/uv/install.sh | sh)
+make --version         # GNU Make (WSL: already installed; Windows: use WSL or Git Bash)
 ```
 
-Also need:
-- VS Code with GitHub Copilot extension
-- Claude Pro subscription ($20/mo) for Claude Code terminal
-- Claude Code superpowers plugin: `/plugin install superpowers@claude-plugins-official`
+VS Code extensions needed: **GitHub Copilot** + **Ruff** + **Mypy**
 
-Optional:
-- `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` in `.env` for remote notifications
-- `GITHUB_TOKEN` in `.env` for GitHub MCP (PRs, issues, code search)
-
----
-
-## 2. Commands You'll Use Daily
-
-### Quality (run before every commit)
-
-| Command | What It Does |
-|---------|-------------|
-| `make check` | **THE command.** Lint + typecheck + test. |
-| `make format` | Auto-fix formatting with ruff |
-| `make lint` | Ruff linter only |
-| `make typecheck` | Mypy type checker only |
-| `make test` | Pytest only |
-
-### Scraping & Discovery
-
-| Command | What It Does |
-|---------|-------------|
-| `make scrape` | Scrape default coding list |
-| `make scrape-list URL="..."` | Scrape any Medium list |
-| `make scrape-tag TAG="ai-agents"` | Scrape by tag |
-| `make discover` | Discover trending articles from RSS |
-| `make discover TAGS="ai-agents,llm" KEYWORDS="agent,Claude"` | Filter discovery |
-| `make discover CURATE=1` | LLM picks the best articles |
-| `make discover-scrape TAGS="ai-agents,llm" CURATE=1` | Discover + curate + auto-scrape |
-
-Add `OUTPUT="path"` to save elsewhere. Add `DATED=1` for date subfolders.
-
-See [src/knowledge/README.md](../src/knowledge/README.md) for the full scraper guide.
-
-### Telegram Notifications
-
-| Command | What It Does |
-|---------|-------------|
-| `make notify MSG="Hello"` | Send a message to Telegram |
-| `make bot` | Start interactive Telegram bot |
-
-Bot commands: `/status`, `/scrape`, `/discover`, `/ask`, `/help`
-
----
-
-## 3. GitHub Copilot (VS Code)
-
-Open with `Ctrl+Shift+I`. Fast, visual, great for small-to-medium tasks.
-
-### Chat Agents
-
-| Agent | What It Does | Example |
-|-------|-------------|---------|
-| `@workspace` | Search and answer questions about your codebase | `@workspace How does the scraper handle 403 errors?` |
-| `@planner` | Plan a feature (read-only, no edits) | `@planner I want to add a Streamlit dashboard` |
-| `@orchestrator` | Implement + test + review in one pass | `@orchestrator Add --limit flag to the scraper CLI` |
-| `@tdd` | TDD enforcement (Red-Green-Refactor) | `@tdd Add retry logic for 429 errors` |
-| `@debugger` | Systematic debugging (root cause first) | `@debugger The scraper hangs on large lists` |
-| `@code-reviewer` | Review code for quality and security | `@code-reviewer Review src/knowledge/article_curator.py` |
-| `@Explore` | Deep read-only codebase exploration | `@Explore How does TrendDiscoverer score articles? (thorough)` |
-
-### Inline Editing
-
-| Action | Shortcut |
-|--------|----------|
-| Edit code in-place | `Ctrl+I` → type instruction |
-| Accept suggestion | `Tab` |
-| Next suggestion | `Alt+]` |
-| Force suggestion | `Alt+\` |
-
-### context7 — Live Library Docs
-
-Add `use context7` to ANY prompt for up-to-date library documentation:
-
-```
-What is the feedparser entry structure? use context7
-How do I use curl_cffi for TLS impersonation? use context7
+Claude Code (optional but recommended for complex work):
+```bash
+# Install Claude Code CLI, then inside it:
+/plugin install superpowers@claude-plugins-official
 ```
 
-### Knowledge Base Access
-
-The filesystem MCP lets Copilot read your scraped articles:
-
-```
-@workspace Read data/knowledge/raw/medium/coding/ and summarize insights on AI coding setups
-```
-
----
-
-## 4. Claude Code (Terminal)
-
-Start with `claude` in your terminal. Powerful for complex, multi-file work.
-
-### Slash Commands
-
-| Command | What It Does |
-|---------|-------------|
-| `/plan [task]` | Plan before coding (read-only) |
-| `/implement [task]` | Implement + test + self-review |
-| `/review [file]` | Code review |
-| `/test [file]` | Generate tests |
-| `/check` | Run full quality gate |
-| `compact` | Compress context when agent gets slow |
-| `clear` | Start fresh (new feature = new session) |
-
-### Superpowers (Auto-Active)
-
-Superpowers is a Claude Code plugin that enforces development workflows:
-
-| Skill | What It Does |
-|-------|-------------|
-| **brainstorming** | Design before code — explores approaches, writes specs |
-| **writing-plans** | Detailed task plans with 2-5 min bite-sized tasks |
-| **subagent-driven-development** | Fresh subagent per task + two-stage review |
-| **test-driven-development** | Red-Green-Refactor enforced — no code without failing test |
-| **systematic-debugging** | Root cause investigation before fixes |
-| **verification-before-completion** | Evidence before claims — run commands, read output |
-
-These skills activate automatically based on what you ask Claude Code to do.
-Install once: `/plugin install superpowers@claude-plugins-official`
-
----
-
-## 5. When to Use Which Tool
-
-| Scenario | Use | Why |
-|----------|-----|-----|
-| Quick fix (1-2 files) | Copilot `Ctrl+I` | Fastest for small edits |
-| Autocomplete | Copilot (automatic) | Always-on while typing |
-| Ask about codebase | Copilot `@workspace` | Fast indexed search |
-| Plan a feature | Either: `@planner` or `/plan` | Both work well |
-| End-to-end feature | Copilot `@orchestrator` | Single-pass implementation |
-| Complex multi-file work | Claude Code `/implement` | Better reasoning + superpowers |
-| TDD workflow | Either: `@tdd` or Claude Code (auto) | Both enforce Red-Green-Refactor |
-| Code review | Either: `@code-reviewer` or `/review` | Both work well |
-| Complex debugging | Either: `@debugger` or Claude Code | Both do root-cause-first |
-| Library docs | Copilot `use context7` | Live doc lookup |
-| Remote monitoring | Telegram bot | `/status`, `/scrape` from phone |
-
-### The Key Rule
-
-**Copilot** = fast, visual, great for small-to-medium tasks and autocomplete.
-**Claude Code** = powerful, great for large multi-file changes and deep reasoning.
-
-Use **both together**: one implements, the other reviews.
-
----
-
-## 6. The Workflow (Agent Collaboration)
-
-Both tools share the same repo, the same quality gates, and the same conventions.
-The workflow uses git branches and GitHub PRs as the collaboration surface.
-
-```
-1. PLAN     → @planner or brainstorming (read-only analysis)
-2. IMPLEMENT → @orchestrator or /implement (on a feature branch)
-3. VERIFY   → make check (both tools run this)
-4. REVIEW   → @code-reviewer or /review (cross-review the other tool's work)
-5. COMMIT   → git push → GitHub PR
-6. NOTIFY   → Telegram sends status update
-```
-
-### Example: Adding a New Feature
+### 2. Install
 
 ```bash
-# 1. Plan it
-# In Copilot: @planner "I want to add retry logic for 429 errors"
-# Or Claude Code: brainstorming activates automatically
+git clone https://github.com/christophvoe/ai-dev-starter
+cd ai-dev-starter
+make install        # creates .venv, installs deps, sets up pre-commit hooks
+cp .env.example .env
+make check          # verify everything works
+```
 
-# 2. Create a branch
-git checkout -b feat/retry-429
+### 3. Personalise
 
-# 3. Implement (pick one tool)
-# @tdd "Add retry with exponential backoff for HTTP 429 errors"
-# Or in Claude Code: /implement "Add retry with exponential backoff for HTTP 429"
+Run the interactive onboarding — it renames files, writes PROJECT.md, and configures
+which tools you're using (Copilot / Claude Code / both):
 
-# 4. Verify
+```bash
+make onboard
+```
+
+It asks 8 questions and writes config for you. Takes ~2 minutes.
+
+### 4. (Optional) Set up Telegram
+
+Add to `.env`:
+```bash
+TELEGRAM_BOT_TOKEN=...   # BotFather → /newbot
+TELEGRAM_CHAT_ID=...     # send /start to your bot, check getUpdates
+TELEGRAM_USER_ID=...     # your Telegram numeric ID
+```
+
+Test: `make notify MSG="Hello from ai-dev-starter"`
+
+Start the bot: `make bot` (or deploy to Railway for always-on — see CHEATSHEET.md)
+
+**You're ready.** Jump to [Daily Workflow](#the-daily-workflow).
+
+---
+
+## Path B — Embed in existing repo
+
+Use this when you already have a project and want the AI tooling available without
+committing it to your repo.
+
+### 1. Clone into your existing repo
+
+```bash
+cd my-existing-repo
+git clone https://github.com/christophvoe/ai-dev-starter
+echo "ai-dev-starter/" >> .gitignore
+echo "*.code-workspace" >> .gitignore
+```
+
+### 2. Install
+
+```bash
+cd ai-dev-starter
+make install
+cp .env.example .env
+# Edit .env
+```
+
+### 3. Promote AI tooling into your repo
+
+This copies the Copilot agents, instructions, and MCP config into your actual repo
+so both AI tools can find them when you work there:
+
+```bash
+make promote TARGET="../"
+```
+
+What gets copied (skips files that already exist):
+- `.github/agents/` — @orchestrator, @tdd, @debugger, @planner, @code-reviewer, @brainstorm
+- `.github/copilot-instructions.md` — project context for every Copilot conversation
+- `.github/instructions/` — code style, testing, security rules
+- `.vscode/mcp.json` — context7 + sequential-thinking MCP servers
+- `CLAUDE.md` — appends ai-dev-starter pointer section
+
+### 4. Enable full AI indexing (critical)
+
+Without this, `@workspace` can't see any ai-dev-starter code (it's gitignored).
+Generate a multi-root workspace file:
+
+```bash
+make workspace TARGET="../"
+code "../my-existing-repo.code-workspace"   # open this instead of the folder
+```
+
+Now `@workspace` indexes both repos. Open the `.code-workspace` file every time.
+
+### 5. (Optional) Set up Telegram — same as Path A
+
+**You're ready.** The daily workflow below works from both your repo and `ai-dev-starter/`.
+
+---
+
+## The Daily Workflow
+
+### Step 1 — Scrape relevant knowledge (optional but powerful)
+
+Before starting a task, scrape articles on the topic. They'll automatically appear in
+`handoff.md` when you start orchestration, giving AI assistants real-world context:
+
+```bash
+cd ai-dev-starter   # or from repo root if embedded
+make scrape-tag TAG="user authentication"
+make scrape-tag TAG="fastapi jwt"
+make discover TAGS="python,auth" CURATE=1   # LLM picks the best
+```
+
+Articles land in `data/knowledge/raw/medium/`. Query them directly:
+```
+@workspace summarize insights from data/knowledge/raw/medium/ on JWT auth patterns
+```
+
+### Step 2 — Start a session
+
+```bash
+make orchestrate-start TASK="add JWT auth to the API"
+```
+
+This creates `docs/orchestration/session.json` and writes `handoff.md` with:
+- The task description pre-filled
+- A `## Knowledge` section listing your recently scraped articles
+- Empty slots for Changed Files, Output, Explanation, Uncertainty
+
+### Step 3 — Plan (PLANNING phase)
+
+Open `docs/orchestration/handoff.md`. The AI planning agent should:
+
+1. Read the `## Knowledge` files listed there
+2. Write the implementation plan back into handoff.md
+
+**Copilot:**
+```
+@planner read docs/orchestration/handoff.md and the listed Knowledge files, then write a plan
+```
+
+or use the primary flow:
+```
+@orchestrator implement: [task] — read handoff.md knowledge files first
+```
+
+**Claude Code:**
+```
+/plan [task]
+```
+Claude Code reads CLAUDE.md which tells it to check the knowledge base.
+
+Advance when done:
+```bash
+make orchestrate-next
+```
+
+### Step 4 — Implement (IMPLEMENTING phase)
+
+```
+@tdd implement the plan in handoff.md
+```
+or
+```
+/implement [from handoff.md]
+```
+
+Run quality gate before advancing:
+```bash
 make check
-
-# 5. Cross-review (use the OTHER tool)
-# @code-reviewer "Review the retry logic on this branch"
-# Or in Claude Code: /review src/knowledge/medium_scraper.py
-
-# 6. Push and notify
-git push -u origin feat/retry-429
-make notify MSG="feat/retry-429 ready for review"
+make orchestrate-next
 ```
 
-### Parallel Agents (Advanced)
+### Step 5 — Review (REVIEWING phase)
 
-Use git worktrees to run both agents simultaneously:
+```
+@code-reviewer review the changes in handoff.md ## Changed Files
+```
+
+- Passes → `make orchestrate-next` → DONE
+- Fails → `make orchestrate-next FAILED=1` → FIXING (other agent reviews)
+
+### Step 6 — Done
 
 ```bash
-git worktree add ../agent-copilot -b feat/copilot-task
-git worktree add ../agent-claude -b feat/claude-task
+make orchestrate-done
+make orchestrate-explain   # send plain-English summary to Telegram
 ```
 
-One agent implements, the other reviews the branch via PR.
-See [WORKTREES.md](WORKTREES.md) for details.
+---
+
+## Quick reference
+
+### Copilot agents
+
+| Agent | Use when | Example |
+|-------|----------|---------|
+| `@orchestrator` | Full feature end-to-end | `@orchestrator implement: add JWT auth` |
+| `@brainstorm` | Approach unclear | `@brainstorm should we use OAuth or JWT?` |
+| `@planner` | Plan first, approve before code | `@planner plan: add JWT auth` |
+| `@tdd` | TDD only | `@tdd implement: add JWT auth` |
+| `@debugger` | Bug, root cause unclear | `@debugger fix: 401 on POST /login` |
+| `@code-reviewer` | Standalone review | `@code-reviewer review src/api/auth.py` |
+
+### Claude Code commands
+
+```
+/implement [task]   implement + test + self-review
+/plan [task]        plan only (read-only)
+/review [file]      code review
+/test [file]        generate tests
+/check              ruff + mypy + pytest
+```
+
+### Orchestration commands
+
+```bash
+make orchestrate-start TASK="..."   # begin
+make orchestrate-status             # where are we?
+make orchestrate-next               # advance
+make orchestrate-next FAILED=1      # review failed
+make orchestrate-explain            # send summary to Telegram
+make orchestrate-done               # complete
+```
+
+### Knowledge / scraping
+
+```bash
+make scrape-tag TAG="topic"         # scrape by topic
+make discover TAGS="t1,t2" CURATE=1 # find + LLM-curate top articles
+make summarize                      # digest of recent articles
+```
 
 ---
 
-## 7. MCP Servers
+## Common pitfalls
 
-These extend your AI tools automatically:
-
-| Server | What It Does | How to Use |
-|--------|-------------|------------|
-| **context7** | Live library docs | Add `use context7` to any prompt |
-| **sequential-thinking** | Step-by-step reasoning | Auto for complex decisions |
-| **filesystem** | Read/write files | Auto — agents use it for file ops |
-| **github** | PRs, issues, code search | Needs `GITHUB_TOKEN` in `.env` |
-
----
-
-## 8. Context Management (Critical)
-
-Agents get confused when context fills up. Keep it clean:
-
-- **One feature per session** — don't mix unrelated work
-- **Start fresh** for new features (`clear` in Claude Code, new chat in Copilot)
-- **Compact** when things get slow (`compact` in Claude Code)
-- **Be specific** — "Add retry logic for 429 errors" beats "fix the scraper"
+| Problem | Fix |
+|---------|-----|
+| `@workspace` can't see ai-dev-starter code | Open the `.code-workspace` file (run `make workspace TARGET="../"`) |
+| Copilot agents not found | Run `make promote TARGET="../"` to copy them |
+| context7 not working | Check `.vscode/mcp.json` exists (promote copies it) |
+| AI ignores knowledge base | Check handoff.md has `## Knowledge` section; re-run `orchestrate-start` |
+| Module not found errors | `PYTHONPATH=src` — run from inside `ai-dev-starter/` or use `uv run` |
+| Pre-commit hook fails | Run `make format` then re-stage |
+| Scraper 403 | Update `MEDIUM_COOKIES` in `.env` (cookies expire) |
+| WSL path issues | Clone repo natively in WSL (`~/my-repo/`) rather than on `/mnt/c/` |
 
 ---
 
-## 9. Common Pitfalls
+## WSL notes
 
-| Problem | Solution |
-|---------|----------|
-| Agent writes wrong code | Be more specific. Reference exact files and functions. |
-| Context filling up | Run `compact`. Start new session for new features. |
-| Tests failing | Run `uv run pytest tests/test_file.py::test_name -v` for details. |
-| Lint/type errors after edit | Run `make format`, then fix mypy errors manually. |
-| Agent ignores conventions | Check CLAUDE.md and copilot-instructions.md are up to date. |
-| MCP not connecting | Restart VS Code. Check `.vscode/mcp.json`. |
-| Scraper 403 errors | Update `MEDIUM_COOKIES` in `.env` (cookies expire). |
-| Superpowers not working | Run `/plugin install superpowers@claude-plugins-official` in Claude Code. |
+`make`, `uv`, and all Python commands work natively in WSL — no admin rights needed.
+
+- Clone your repo inside WSL (e.g., `~/ai-dev-starter`) for best performance
+- If you must work on `/mnt/c/`, use `uv run python -m ...` directly instead of `make`
+- The `.venv/Scripts/python.exe` path is Windows-only; WSL uses `.venv/bin/python`
 
 ---
 
-## 10. Next Steps
+## Next reading
 
-1. **Set up** Telegram notifications (see [ACTION-PLAN.md](ACTION-PLAN.md) Phase 2c)
-2. **Try** the workflow: plan → implement → verify → review → push
-3. **Cross-review**: implement with one tool, review with the other
-4. **Explore** parallel agents with git worktrees (see [WORKTREES.md](WORKTREES.md))
+- [docs/CHEATSHEET.md](CHEATSHEET.md) — all commands on one page
+- [docs/EMBED-IN-EXISTING-REPO.md](EMBED-IN-EXISTING-REPO.md) — full embed guide with indexing details
+- [docs/LLM-CONNECTIONS.md](LLM-CONNECTIONS.md) — API key options (Anthropic, Ollama, OpenRouter…)
